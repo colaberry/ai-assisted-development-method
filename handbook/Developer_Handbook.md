@@ -159,6 +159,26 @@ Read it on your first day. Read it when you join a new client repo. Read it befo
 
 If CLAUDE.md is over 500 lines or clearly stale, that's a problem to raise — don't just work around it. Stale context is worse than no context because it misleads confidently.
 
+### 1.8 Reviewing AI-assisted PRs
+
+AI-generated code has a distinct smell. It looks correct — often more polished than hand-written code — but it fails in specific, repeatable ways that generic PR review doesn't catch: invented APIs that don't exist in the pinned version, over-defensive guards against impossible states, plausible-but-wrong docstrings, silent scope creep beyond the task's `Satisfies:` IDs, and tests that were adjusted to match the implementation instead of describing the behavior.
+
+Generic review training tells you to look for "bugs" and "readability." Neither framework surfaces these patterns. The review needs to be AI-aware.
+
+**The rule:** on any PR marked `AI-assisted: yes`, complete the [AI-assisted PR review checklist](../tooling/templates/code-review-AI-CHECKLIST.md) before approving. Copy the checklist into the PR description or reference it with `✅ AI-assist review: checklist-v1 completed by @<reviewer>`.
+
+**What the checklist adds over generic review:**
+
+- Scope verification against `Satisfies:` IDs — catches when the agent "cleaned up adjacent code" without being asked.
+- API existence checks — catches hallucinated method signatures, config keys, CLI flags, env variables. Grep vendor docs; don't trust the snippet.
+- Plausible-but-wrong docstring detection — read the docstring and function body independently; if the docstring could describe any function in this codebase, it's hallucinated.
+- Defensive-coding detection — flags `null` checks on parameters that can't be null, `except: pass` blocks, swallowed promise rejections.
+- Test-modification scrutiny — if a test changed in the diff, the commit message must explain *why the old assertion was wrong*. "Adjusted test to match new behavior" is a red flag, not an explanation.
+
+Items marked `[blocking]` in the checklist are merge-blockers; don't approve with caveats. Walk the list top to bottom — the whole point is to force the pause.
+
+**When to skip the checklist.** When the diff was genuinely written by a human and the agent was only used for tab-completion or formatting, `AI-assisted: no` is honest. Don't checkbox-ritualize the process; either the checklist earns its time or it doesn't.
+
 ---
 
 ## Part 2: Prompting Claude Code within the method
@@ -357,6 +377,7 @@ If the method feels slow after five initiatives, look for these specific problem
 3. Check for test modifications in the diff. If tests were changed to match code, that's a flag.
 4. Check CLAUDE.md compliance. Any never-do rules violated?
 5. Check for unrequested scope. If the code does things tests don't require, that's a flag.
+6. If the PR is marked `AI-assisted: yes`, walk the [AI-assisted PR review checklist](../tooling/templates/code-review-AI-CHECKLIST.md) top to bottom.
 
 ### When something goes wrong
 

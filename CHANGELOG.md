@@ -19,6 +19,10 @@ Prioritized roadmap — items listed in rough order of leverage-per-effort.
 - **Gate ceremony skills** — `/gate-1-to-2`, `/gate-2-to-3` for Internal Product Mode graduation gates, reusing the interview protocol from the state-check skill.
 - **Tightened Gate 2 criteria in Internal Product Mode** — add a concrete retention metric (e.g., N-week self-directed return rate) to prevent graduation on optimism.
 - **Resolve the Stage 1 test-matrix contradiction** — Internal Product Mode lists Category D as "only if time permits" in the table but treats it as required in the anti-patterns section. Reconcile.
+- **AI code-smell review checklist** ([#5](https://github.com/colaberry/ai-assisted-development-method/issues/5)) — handbook chapter + `tooling/templates/code-review-AI-CHECKLIST.md` targeting AI-specific PR review failure modes (surface correctness, invented APIs, silent scope creep). Pure-doc change; land first.
+- **`/incident` skill** ([#6](https://github.com/colaberry/ai-assisted-development-method/issues/6)) — post-deployment learning loop. Writes a post-mortem, extracts prevention rules into `docs/failures/`, optionally drafts a design-doc update PR when an incident invalidates a requirement. Completes the SDLC coverage that today stops at sprint close.
+- **Semgrep security merge gate** ([#7](https://github.com/colaberry/ai-assisted-development-method/issues/7)) — `tooling/.github/workflows/security.yml` alongside `reconcile.yml`. Traceability + security become the two structural gates; manual `/security-review` becomes the escalation path, not the only layer.
+- **`Autonomy:` annotation in TASKS.md** ([#8](https://github.com/colaberry/ai-assisted-development-method/issues/8)) — optional per-task line (`direct` | `checkpoint` | `review-only`) that tunes how often `/dev` pauses for human confirmation. Ties autonomy to task risk and test coverage.
 
 ## [3.2.1] — 2026-04-16
 
