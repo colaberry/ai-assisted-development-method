@@ -1,6 +1,6 @@
-# AI-Assisted Development Method
+# AI-Assisted Development Method (AADM)
 
-A structured process for shipping enterprise-grade software with Claude Code. Designed for small teams (3–10 engineers) delivering to external clients, with a companion mode for internal product development that may eventually ship as SaaS.
+**AADM** is a structured process for shipping enterprise-grade software with Claude Code. Designed for small teams (3–10 engineers) delivering to external clients, with a companion mode for internal product development that may eventually ship as SaaS.
 
 **Current versions:** Method v3.2.1 · Internal Product Mode v1.0 · state-check v0.1
 

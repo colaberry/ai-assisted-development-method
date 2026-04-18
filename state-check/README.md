@@ -1,6 +1,6 @@
 # State Check — CLI + Claude Code Skill
 
-A paired tool for detecting what state your repo is in and what to work on next, within the AI-Assisted Development Method.
+A paired tool for detecting what state your repo is in and what to work on next, within the AI-Assisted Development Method (AADM).
 
 ## What's here
 

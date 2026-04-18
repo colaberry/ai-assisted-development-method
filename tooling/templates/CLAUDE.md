@@ -160,7 +160,7 @@ when you have real entries.>
 
 ## Method rules (non-negotiable)
 
-These come from the AI-Assisted Development Method and apply to every session:
+These come from the AI-Assisted Development Method (AADM) and apply to every session:
 
 1. **Never start work on sprint vN+1 until sprint vN has been locked via `/sprint-close`.**
 2. **Every task has a `Satisfies:` line citing the design-doc requirement IDs it closes.**
