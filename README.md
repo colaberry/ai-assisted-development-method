@@ -70,6 +70,17 @@ This is a **production v1**, not a finished product. Ready to adopt on a real en
 - **Active failures-log rules:** 20–50 for a mature codebase. Prune quarterly.
 - **Phase 0 duration:** 1–3 weeks for typical enterprise engagements.
 
+## Local conventions for private notes
+
+For maintainers who want to keep client-specific notes, engagement writeups, or internal discussion of how this methodology is being applied to a real client *alongside* the public repo (without those notes leaking publicly), the following folder/file patterns are gitignored and safe for private content:
+
+- `clients/` — anything under here, e.g. `clients/acme-corp/notes.md`
+- `private/` — generic catchall
+- `*.private.md` — any markdown file ending in `.private.md`
+- `*.private/` — any folder ending in `.private`
+
+These patterns are enforced by [`.gitignore`](.gitignore). Verify with `git status` before committing if you're not sure — Git will silently ignore matching paths and they will never be staged.
+
 ## Contributing
 
 Feedback, bug reports, and method refinements are welcome. Issue templates cover three kinds of input:

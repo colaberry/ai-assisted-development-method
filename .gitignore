@@ -13,3 +13,14 @@ __pycache__/
 *.swp
 .idea/
 .vscode/
+
+# Private content — NEVER committed.
+# Use these folders for client notes, engagement-specific writeups, internal
+# meta-discussion of how this methodology is being applied to a real client,
+# or anything else you want kept off the public repo.
+# Anything matching these patterns is ignored everywhere in the tree.
+clients/
+private/
+*.private.md
+*.private/
+
