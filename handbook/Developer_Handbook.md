@@ -179,6 +179,25 @@ Items marked `[blocking]` in the checklist are merge-blockers; don't approve wit
 
 **When to skip the checklist.** When the diff was genuinely written by a human and the agent was only used for tab-completion or formatting, `AI-assisted: no` is honest. Don't checkbox-ritualize the process; either the checklist earns its time or it doesn't.
 
+### 1.9 Security as a merge gate
+
+AADM has two structural merge gates. The first is **traceability** (`reconcile.py` / `reconcile.yml`), which blocks PRs that don't cover their sprint's requirement IDs. The second is **security** (`security.yml`), which runs Semgrep on every PR and fails the build on any ERROR-severity finding.
+
+Both gates exist for the same reason: AI-generated code is plausible enough to pass human review. The traceability gate catches "the PR claims to satisfy SOW-§4.2 but nothing in the diff addresses it." The security gate catches "the PR introduces SQL concatenation, a hardcoded secret, an unsanitized template render, or a dangerous subprocess call."
+
+**What to do when the security gate fires on your PR:**
+
+1. **Read the Semgrep finding.** It names the rule, the file, the line, and usually a short explanation.
+2. **Fix, don't suppress.** The default response is always to change the code. Parameterize the query, move the secret to an env variable, sanitize the input.
+3. **If suppression is genuinely correct** — the rule doesn't apply to this specific call site because of an invariant the scanner can't see — then:
+   - Add `# nosemgrep: <rule-id>` (Python) or the equivalent for your language, on the line the rule fires on.
+   - Add a matching entry in `docs/security/suppressions.md` using the template from `tooling/templates/security-suppressions-TEMPLATE.md`. Every entry needs a **Re-reviewed** date, a reviewer handle, the **Satisfies affected** IDs, and a concrete **Justification** that names the invariant. "Trusted input" is not a justification; "Input comes from `middleware/auth.py:42` after session validation" is.
+4. **Do not disable the workflow.** A disabled gate that you forgot to re-enable is how these things fail silently. If the entire rule pack is noisy, tune `--config=` to a narrower set; don't turn the gate off.
+
+**The 90-day ceremony.** Every entry in `suppressions.md` is re-reviewed every 90 days. `state-check.py` flags entries older than that as P2. Re-review means one of three outcomes: remove the suppression (the rule now applies), update the Re-reviewed date with current reasoning (it still applies), or supersede with a fix. This prevents silent rot.
+
+The manual `/security-review` checklist remains — as the *escalation path*, not the only layer. Use it when the Semgrep finding is ambiguous, when you're touching authentication/authorization/cryptography, or when the suppression would affect a SOW-level security requirement.
+
 ---
 
 ## Part 2: Prompting Claude Code within the method

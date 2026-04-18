@@ -21,6 +21,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import subprocess
@@ -51,6 +52,27 @@ FAILURE_STATUS_RE = re.compile(
     r"^\s*Status:\s*(?P<status>.+?)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+
+# Security-suppressions entry heading: "### S001: description"
+SUPPRESSION_HEADING_RE = re.compile(
+    r"^###\s+(?P<id>S\d+):",
+    re.MULTILINE,
+)
+
+# "**Re-reviewed:** YYYY-MM-DD" inside a suppressions entry.
+SUPPRESSION_REVIEW_DATE_RE = re.compile(
+    r"\*\*Re-reviewed:\*\*\s*(?P<date>\d{4}-\d{2}-\d{2})",
+    re.IGNORECASE,
+)
+
+# "**Removed:**" marker that indicates the entry is historical, not active.
+SUPPRESSION_REMOVED_RE = re.compile(
+    r"\*\*Removed:\*\*",
+    re.IGNORECASE,
+)
+
+# Stale threshold for security suppressions (days).
+SUPPRESSION_STALE_DAYS = 90
 
 
 # =====================================================================
@@ -356,6 +378,71 @@ def check_failures_log_size(repo: Path) -> Optional[Flag]:
     return None
 
 
+def _iter_suppression_entries(text: str) -> list[tuple[str, str]]:
+    """Split suppressions.md into (id, body) pairs for each entry heading.
+
+    Body is the text between one heading and the next (or EOF).
+    """
+    matches = list(SUPPRESSION_HEADING_RE.finditer(text))
+    entries: list[tuple[str, str]] = []
+    for i, m in enumerate(matches):
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        entries.append((m.group("id"), text[start:end]))
+    return entries
+
+
+def check_security_suppressions_staleness(
+    repo: Path,
+    today: Optional[datetime.date] = None,
+) -> Optional[Flag]:
+    """Flag security suppressions whose Re-reviewed date is older than 90 days.
+
+    An unreviewed suppression is a silent exception to the security gate. The
+    90-day ceremony in `docs/security/suppressions.md` prevents quiet rot.
+    Entries marked `**Removed:**` are excluded.
+    """
+    supp = repo / "docs" / "security" / "suppressions.md"
+    if not supp.is_file():
+        return None  # not using the suppressions discipline — no check
+    try:
+        text = supp.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    if today is None:
+        today = datetime.date.today()
+    threshold = today - datetime.timedelta(days=SUPPRESSION_STALE_DAYS)
+    stale: list[str] = []
+    missing_date: list[str] = []
+    for entry_id, body in _iter_suppression_entries(text):
+        if SUPPRESSION_REMOVED_RE.search(body):
+            continue
+        m = SUPPRESSION_REVIEW_DATE_RE.search(body)
+        if m is None:
+            missing_date.append(entry_id)
+            continue
+        try:
+            reviewed = datetime.date.fromisoformat(m.group("date"))
+        except ValueError:
+            missing_date.append(entry_id)
+            continue
+        if reviewed < threshold:
+            stale.append(entry_id)
+    if not stale and not missing_date:
+        return None
+    parts = []
+    if stale:
+        parts.append(f"{len(stale)} entr(ies) not re-reviewed in {SUPPRESSION_STALE_DAYS}+ days: {', '.join(stale[:3])}{'...' if len(stale) > 3 else ''}")
+    if missing_date:
+        parts.append(f"{len(missing_date)} entr(ies) missing or malformed Re-reviewed: {', '.join(missing_date[:3])}{'...' if len(missing_date) > 3 else ''}")
+    return Flag(
+        severity="P2",
+        category="security",
+        message="Security suppressions need ceremony. " + " ".join(parts),
+        suggested_action="Re-review each stale suppression: either remove it (the rule now applies), update **Re-reviewed:** to today's date with your handle, or supersede with a fix.",
+    )
+
+
 def check_multiple_initiatives(candidates: list) -> Optional[Flag]:
     """Warn when multiple design docs compete for the active-initiative slot."""
     if len(candidates) <= 1:
@@ -593,6 +680,7 @@ def run_state_check(repo: Path) -> ModeState:
         check_claude_md_placeholders,
         check_failures_log_size,
         check_test_modifications,
+        check_security_suppressions_staleness,
     ):
         flag = check(repo)
         if flag:

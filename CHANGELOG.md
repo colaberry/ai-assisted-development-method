@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The
 
 ## [Unreleased]
 
+### Added
+
+- **Semgrep security merge gate** ([#7](https://github.com/colaberry/ai-assisted-development-method/issues/7)) — [tooling/.github/workflows/security.yml](tooling/.github/workflows/security.yml) runs Semgrep (`--config=auto --severity=ERROR`) on every PR and push to main as a structural merge gate alongside [reconcile.yml](tooling/.github/workflows/reconcile.yml). Traceability + security are now the two structural gates; manual `/security-review` becomes the escalation path, not the only layer. Deliberate suppressions live in `docs/security/suppressions.md` (see [tooling/templates/security-suppressions-TEMPLATE.md](tooling/templates/security-suppressions-TEMPLATE.md)) with a 90-day re-review ceremony enforced by `state-check.py`. Handbook §1.9 "Security as a merge gate" documents the discipline.
+
 ### Planned
 
 Prioritized roadmap — items listed in rough order of leverage-per-effort.
@@ -21,7 +25,6 @@ Prioritized roadmap — items listed in rough order of leverage-per-effort.
 - **Resolve the Stage 1 test-matrix contradiction** — Internal Product Mode lists Category D as "only if time permits" in the table but treats it as required in the anti-patterns section. Reconcile.
 - **AI code-smell review checklist** ([#5](https://github.com/colaberry/ai-assisted-development-method/issues/5)) — handbook chapter + `tooling/templates/code-review-AI-CHECKLIST.md` targeting AI-specific PR review failure modes (surface correctness, invented APIs, silent scope creep). Pure-doc change; land first.
 - **`/incident` skill** ([#6](https://github.com/colaberry/ai-assisted-development-method/issues/6)) — post-deployment learning loop. Writes a post-mortem, extracts prevention rules into `docs/failures/`, optionally drafts a design-doc update PR when an incident invalidates a requirement. Completes the SDLC coverage that today stops at sprint close.
-- **Semgrep security merge gate** ([#7](https://github.com/colaberry/ai-assisted-development-method/issues/7)) — `tooling/.github/workflows/security.yml` alongside `reconcile.yml`. Traceability + security become the two structural gates; manual `/security-review` becomes the escalation path, not the only layer.
 - **`Autonomy:` annotation in TASKS.md** ([#8](https://github.com/colaberry/ai-assisted-development-method/issues/8)) — optional per-task line (`direct` | `checkpoint` | `review-only`) that tunes how often `/dev` pauses for human confirmation. Ties autonomy to task risk and test coverage.
 
 ## [3.2.1] — 2026-04-16

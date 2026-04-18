@@ -1,0 +1,70 @@
+name: Security
+
+# Runs Semgrep on every PR and push to main. Blocks merges on any ERROR-severity
+# finding. WARNING-severity findings surface as annotations but do not block.
+#
+# Rationale:
+#   - AI-generated code regularly introduces plausible-looking injection, secret,
+#     and misconfiguration patterns. Human review alone is not a reliable gate.
+#   - This workflow pairs with reconcile.yml: together they form the two
+#     structural merge gates (traceability + security).
+#   - Deliberate suppressions live in docs/security/suppressions.md with a
+#     justification, reviewer, SOW ID affected, and a re-review date.
+#
+# Customization:
+#   - To run a narrower rule set, replace `--config=auto` with specific packs
+#     (e.g. `--config=p/owasp-top-ten --config=p/secrets`).
+#   - To pin Semgrep to a specific version, change `semgrep/semgrep:latest` to
+#     `semgrep/semgrep:1.98.0` or similar.
+#   - Teams running on Semgrep AppSec Platform: set SEMGREP_APP_TOKEN in
+#     repository secrets and swap the `scan` line for `semgrep ci`.
+#   - Extending to other tools: if you add Bandit (# nosec), Trivy, or similar
+#     alongside Semgrep, extend the `Rule:` field in suppressions.md to name the
+#     tool + rule, and the removal ceremony to cover all active suppression
+#     syntaxes. The 90-day ceremony and state-check staleness flag apply
+#     tool-agnostically.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least-privilege: read the repo, and write security events so the SARIF
+# upload can land findings in the GitHub Security tab.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    # Guardrail against a runaway scan on a very large repo.
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep:latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config=auto \
+            --error \
+            --severity=ERROR \
+            --metrics=off \
+            --sarif --output=semgrep.sarif
+
+      # Surfaces findings in the GitHub Security tab and annotates the PR
+      # diff directly. Requires `security-events: write` (set above). Teams
+      # without GitHub Advanced Security can swap back to
+      # `actions/upload-artifact@v4` to keep the SARIF as a download-only
+      # artifact.
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

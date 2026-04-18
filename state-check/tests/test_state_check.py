@@ -191,5 +191,95 @@ class GitGracefulFallbackTests(unittest.TestCase):
             self.assertEqual(sc.git_recent_test_modifications(Path(tmp)), [])
 
 
+class SecuritySuppressionsStalenessTests(unittest.TestCase):
+    import datetime as _dt
+
+    def _write(self, tmp: str, entries_md: str) -> Path:
+        supp = Path(tmp) / "docs" / "security"
+        supp.mkdir(parents=True)
+        (supp / "suppressions.md").write_text(
+            "# Security Suppressions\n\n" + entries_md, encoding="utf-8"
+        )
+        return Path(tmp)
+
+    def test_no_file_no_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(sc.check_security_suppressions_staleness(Path(tmp)))
+
+    def test_fresh_entry_no_flag(self):
+        today = self._dt.date(2026, 4, 18)
+        body = (
+            "### S001: fresh\n\n"
+            "- **Re-reviewed:** 2026-04-01 by @alice\n"
+            "- **Justification:** test\n\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._write(tmp, body)
+            self.assertIsNone(
+                sc.check_security_suppressions_staleness(repo, today=today)
+            )
+
+    def test_stale_entry_flagged(self):
+        today = self._dt.date(2026, 4, 18)
+        body = (
+            "### S001: ancient\n\n"
+            "- **Re-reviewed:** 2025-10-01 by @alice\n"  # >90 days
+            "- **Justification:** test\n\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._write(tmp, body)
+            flag = sc.check_security_suppressions_staleness(repo, today=today)
+            self.assertIsNotNone(flag)
+            self.assertEqual(flag.severity, "P2")
+            self.assertIn("S001", flag.message)
+
+    def test_missing_date_flagged(self):
+        body = (
+            "### S002: no-date\n\n"
+            "- **Justification:** someone forgot to add the Re-reviewed line\n\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._write(tmp, body)
+            flag = sc.check_security_suppressions_staleness(repo)
+            self.assertIsNotNone(flag)
+            self.assertIn("S002", flag.message)
+
+    def test_removed_entry_ignored(self):
+        today = self._dt.date(2026, 4, 18)
+        body = (
+            "### S003: historical\n\n"
+            "- **Re-reviewed:** 2024-01-01 by @alice\n"  # very old
+            "- **Removed:** 2025-06-01 by @bob — fixed in #42\n\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._write(tmp, body)
+            self.assertIsNone(
+                sc.check_security_suppressions_staleness(repo, today=today)
+            )
+
+    def test_mixed_entries(self):
+        today = self._dt.date(2026, 4, 18)
+        body = (
+            "### S001: stale\n\n"
+            "- **Re-reviewed:** 2025-01-01 by @alice\n\n"
+            "### S002: fresh\n\n"
+            "- **Re-reviewed:** 2026-04-10 by @bob\n\n"
+            "### S003: no-date\n\n"
+            "- **Justification:** oops\n\n"
+            "### S004: removed\n\n"
+            "- **Re-reviewed:** 2024-01-01 by @bob\n"
+            "- **Removed:** 2025-06-01\n\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self._write(tmp, body)
+            flag = sc.check_security_suppressions_staleness(repo, today=today)
+            self.assertIsNotNone(flag)
+            self.assertIn("S001", flag.message)
+            self.assertIn("S003", flag.message)
+            # Fresh and removed entries should NOT appear
+            self.assertNotIn("S002", flag.message)
+            self.assertNotIn("S004", flag.message)
+
+
 if __name__ == "__main__":
     unittest.main()
