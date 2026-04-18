@@ -1,0 +1,53 @@
+name: Security
+
+# Runs Semgrep on every PR and push to main. Blocks merges on any ERROR-severity
+# finding. WARNING-severity findings surface as annotations but do not block.
+#
+# Rationale:
+#   - AI-generated code regularly introduces plausible-looking injection, secret,
+#     and misconfiguration patterns. Human review alone is not a reliable gate.
+#   - This workflow pairs with reconcile.yml: together they form the two
+#     structural merge gates (traceability + security).
+#   - Deliberate suppressions live in docs/security/suppressions.md with a
+#     justification, reviewer, SOW ID affected, and a re-review date.
+#
+# Customization:
+#   - To run a narrower rule set, replace `--config=auto` with specific packs
+#     (e.g. `--config=p/owasp-top-ten --config=p/secrets`).
+#   - To pin Semgrep to a specific version, change `semgrep/semgrep:latest` to
+#     `semgrep/semgrep:1.98.0` or similar.
+#   - Teams running on Semgrep AppSec Platform: set SEMGREP_APP_TOKEN in
+#     repository secrets and swap the `scan` line for `semgrep ci`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config=auto \
+            --error \
+            --severity=ERROR \
+            --metrics=off \
+            --sarif --output=semgrep.sarif
+
+      - name: Upload SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 30
