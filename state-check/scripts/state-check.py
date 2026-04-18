@@ -31,6 +31,29 @@ from typing import Optional
 
 
 # =====================================================================
+# Module-level patterns
+# =====================================================================
+
+# Path components that unambiguously denote test code.
+TEST_PATH_COMPONENTS = {"tests", "test", "__tests__", "spec", "specs"}
+
+# Filename forms: foo_test.py, test_foo.py, foo.test.ts, foo.spec.tsx, etc.
+TEST_FILENAME_RE = re.compile(
+    r"(^|[._-])(test|spec)([._-]|$)|\.(test|spec)\.[A-Za-z0-9]+$",
+    re.IGNORECASE,
+)
+
+# CLAUDE.md unfilled placeholders, e.g. <PROJECT_NAME>, <CLIENT NAME>.
+PLACEHOLDER_RE = re.compile(r"<[A-Z][A-Z0-9 _-]{2,}>")
+
+# Status: line in a failures-log entry.
+FAILURE_STATUS_RE = re.compile(
+    r"^\s*Status:\s*(?P<status>.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+# =====================================================================
 # Data classes
 # =====================================================================
 
@@ -142,21 +165,23 @@ def count_tasks(tasks_file: Path) -> tuple[int, int, int]:
     return (open_count, complete_count, deferred_count)
 
 
-def find_active_initiative(repo: Path) -> Optional[str]:
-    """Find the most recently modified design doc under docs/, excluding known subfolders."""
+def find_active_initiative(repo: Path) -> tuple[Optional[str], list[Path]]:
+    """Find the most recently modified design doc under docs/.
+
+    Returns (active_stem, all_candidates). The candidate list lets callers
+    detect ambiguity when multiple design docs compete for "active".
+    """
     docs_dir = repo / "docs"
     if not docs_dir.is_dir():
-        return None
-    excluded_dirs = {"intake", "contract", "decisions", "failures", "client-facing"}
+        return (None, [])
     candidates = [
         p for p in docs_dir.iterdir()
         if p.is_file() and p.suffix == ".md" and p.stem != "hypothesis"
     ]
     if not candidates:
-        return None
-    # Use most recently modified as a heuristic for "active"
+        return (None, [])
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
-    return latest.stem
+    return (latest.stem, candidates)
 
 
 # =====================================================================
@@ -177,23 +202,61 @@ def git_file_exists_in_history(repo: Path, path: str) -> bool:
         return False
 
 
-def git_recent_test_modifications(repo: Path, since: str = "2.days") -> list[str]:
+def is_test_file(path: str) -> bool:
+    """Path-component / filename match for test files.
+
+    Avoids substring false positives like 'latest.md', 'contest_routes.py',
+    'src/spectrum.py'.
     """
-    Return list of test files modified in recent commits. A heuristic for the
-    "tests modified to match code" anti-pattern. Empty list on error.
+    parts = path.replace("\\", "/").split("/")
+    if any(part.lower() in TEST_PATH_COMPONENTS for part in parts):
+        return True
+    name = parts[-1] if parts else path
+    return bool(TEST_FILENAME_RE.search(name))
+
+
+def find_latest_lock_commit(repo: Path) -> Optional[str]:
+    """Return the SHA of the most recent commit that added/touched a sprint .lock.
+
+    Returns None if no lock has been committed or git is unavailable.
     """
     try:
         result = subprocess.run(
-            ["git", "-C", str(repo), "log", f"--since={since}", "--name-only", "--pretty=format:"],
+            ["git", "-C", str(repo), "log", "-1", "--format=%H", "--",
+             ":(glob)sprints/*/.lock"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode != 0:
+            return None
+        sha = result.stdout.strip()
+        return sha or None
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+
+
+def git_recent_test_modifications(repo: Path) -> list[str]:
+    """Return test files modified since the most recent sprint .lock.
+
+    Falls back to a 14-day window if no .lock has been committed yet — this
+    widens the previous brittle 2-day window so weekend/vacation gaps don't
+    silently dodge the check.
+    Empty list on error.
+    """
+    base = find_latest_lock_commit(repo)
+    cmd = ["git", "-C", str(repo), "log"]
+    if base:
+        cmd.append(f"{base}..HEAD")
+    else:
+        cmd.append("--since=14.days")
+    cmd.extend(["--name-only", "--pretty=format:"])
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
             return []
         lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-        # Heuristic: any file with "test" in the path
-        return sorted(set(l for l in lines if "test" in l.lower()))
+        return sorted(set(l for l in lines if is_test_file(l)))
     except (subprocess.SubprocessError, FileNotFoundError):
         return []
 
@@ -225,20 +288,87 @@ def check_claude_md_size(repo: Path) -> Optional[Flag]:
     return None
 
 
+def check_claude_md_placeholders(repo: Path) -> Optional[Flag]:
+    """Detect unfilled <BRACKETED> placeholders in CLAUDE.md.
+
+    A CLAUDE.md that exists with placeholders is worse than missing — every
+    session reads placeholder context as if it were real instructions.
+    """
+    claude_md = repo / "CLAUDE.md"
+    if not claude_md.is_file():
+        return None  # missing-file case is handled by check_claude_md_size
+    try:
+        text = claude_md.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    matches = sorted(set(PLACEHOLDER_RE.findall(text)))
+    if not matches:
+        return None
+    sample = ", ".join(matches[:3])
+    more = "" if len(matches) <= 3 else f" (+{len(matches) - 3} more)"
+    return Flag(
+        severity="P0",
+        category="setup",
+        message=f"CLAUDE.md contains unfilled placeholders: {sample}{more}",
+        suggested_action="Replace each <BRACKETED> placeholder with project-specific content. Unfilled placeholders read like real instructions to the LLM.",
+    )
+
+
 def check_failures_log_size(repo: Path) -> Optional[Flag]:
+    """Count *active* prevention rules — not files.
+
+    Entries with `Status: Retired` (or similar) don't count against the 20–50
+    guideline. Entries lacking a Status: line are counted as active and called
+    out so the team can annotate them.
+    """
     failures_dir = repo / "docs" / "failures"
     if not failures_dir.is_dir():
         return None
-    entries = [p for p in failures_dir.iterdir() if p.is_file() and p.suffix == ".md" and p.stem not in ("README", "TEMPLATE")]
-    count = len(entries)
-    if count > 100:
+    entries = [
+        p for p in failures_dir.iterdir()
+        if p.is_file() and p.suffix == ".md" and p.stem not in ("README", "TEMPLATE")
+    ]
+    active = 0
+    unannotated = 0
+    for p in entries:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        m = FAILURE_STATUS_RE.search(text)
+        if m is None:
+            unannotated += 1
+            active += 1  # treat as active until proven otherwise
+            continue
+        status = m.group("status").lower()
+        if "active" in status:
+            active += 1
+    if active > 50:
+        msg = f"Failures log has {active} active prevention rule(s) (guideline: 20–50)."
+        if unannotated:
+            msg += f" {unannotated} entr(ies) lack a Status: line and were counted as active."
         return Flag(
             severity="P2",
             category="memory",
-            message=f"Failures log has {count} entries (guideline: prune beyond 20–50 active rules).",
-            suggested_action="Run a consolidation pass: merge entries producing the same prevention rule; retire rules unused in 12 months.",
+            message=msg,
+            suggested_action="Consolidate duplicate rules; mark obsolete entries `Status: Retired`. Add a Status: line to any unannotated entries.",
         )
     return None
+
+
+def check_multiple_initiatives(candidates: list) -> Optional[Flag]:
+    """Warn when multiple design docs compete for the active-initiative slot."""
+    if len(candidates) <= 1:
+        return None
+    names = sorted(p.stem for p in candidates)
+    sample = ", ".join(names[:3])
+    more = "" if len(names) <= 3 else f" (+{len(names) - 3} more)"
+    return Flag(
+        severity="P1",
+        category="ambiguity",
+        message=f"Multiple design docs found under docs/: {sample}{more}. Active initiative was picked by mtime — may be wrong.",
+        suggested_action="Move inactive design docs under docs/archive/ or pick an explicit convention (e.g., frontmatter `status: active`).",
+    )
 
 
 def check_sprint_state(sprint: Path, mode: str) -> list[Flag]:
@@ -454,13 +584,23 @@ def run_state_check(repo: Path) -> ModeState:
         state.phase = "between-sprints"
         state.active_sprint = str(sprint_dirs[-1].relative_to(repo)) + " (locked)"
 
-    state.active_initiative = find_active_initiative(repo)
+    active_init, init_candidates = find_active_initiative(repo)
+    state.active_initiative = active_init
 
     # Repo-wide checks
-    for check in (check_claude_md_size, check_failures_log_size, check_test_modifications):
+    for check in (
+        check_claude_md_size,
+        check_claude_md_placeholders,
+        check_failures_log_size,
+        check_test_modifications,
+    ):
         flag = check(repo)
         if flag:
             state.flags.append(flag)
+
+    multi = check_multiple_initiatives(init_candidates)
+    if multi:
+        state.flags.append(multi)
 
     state.flags.extend(check_mode_specific(mode, stage, repo))
 
