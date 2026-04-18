@@ -29,10 +29,11 @@ on:
   push:
     branches: [main]
 
-# Least-privilege: the job only reads repo contents. If you adopt the CodeQL
-# SARIF upload (see TODO below), add `security-events: write`.
+# Least-privilege: read the repo, and write security events so the SARIF
+# upload can land findings in the GitHub Security tab.
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   semgrep:
@@ -56,16 +57,14 @@ jobs:
             --metrics=off \
             --sarif --output=semgrep.sarif
 
-      # TODO: swap this step for `github/codeql-action/upload-sarif@v3` so
-      # findings surface in the GitHub Security tab and annotate the PR diff
-      # directly, instead of sitting as a download-only artifact. Requires
-      # adding `security-events: write` to the `permissions:` block above.
-      # Deferred: `actions/upload-artifact` keeps the template dependency-free
-      # for teams not using GitHub Advanced Security.
-      - name: Upload SARIF
+      # Surfaces findings in the GitHub Security tab and annotates the PR
+      # diff directly. Requires `security-events: write` (set above). Teams
+      # without GitHub Advanced Security can swap back to
+      # `actions/upload-artifact@v4` to keep the SARIF as a download-only
+      # artifact.
+      - name: Upload SARIF to GitHub Security tab
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: semgrep-sarif
-          path: semgrep.sarif
-          retention-days: 30
+          sarif_file: semgrep.sarif
+          category: semgrep
