@@ -1,6 +1,6 @@
 # Developer Handbook
 
-*Practices for engineers working on teams that use the AI-Assisted Development Method*
+*Practices for engineers working on teams that use the AI-Assisted Development Method (AADM)*
 
 This document is for engineers on the ground. It assumes you have read (or will read) the main method document. This handbook covers three things:
 

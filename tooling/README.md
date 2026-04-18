@@ -1,4 +1,4 @@
-# Day-One Tooling for the AI-Assisted Development Method
+# Day-One Tooling for the AI-Assisted Development Method (AADM)
 
 This bundle contains the minimum tooling to start using the method on a new client repo:
 

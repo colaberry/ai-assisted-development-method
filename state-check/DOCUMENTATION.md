@@ -10,7 +10,7 @@ State-check is a pair of tools — a Python CLI and a Claude Code skill — that
 
 > **"Where are we in the method right now, and what should I work on next?"**
 
-It exists because the AI-Assisted Development Method has real surface area. A mid-size engagement has a design doc, a SOW, a failures log, multiple sprints, CLAUDE.md, retros, and a set of conventions to follow. An engineer sitting down at the start of a session — especially if they've been away for a few days or joined recently — has to reconstruct "where are we?" before doing anything. That reconstruction is slow and error-prone. Worse, it's the exact moment when skipping steps is easiest, because nobody is watching.
+It exists because the AI-Assisted Development Method (AADM) has real surface area. A mid-size engagement has a design doc, a SOW, a failures log, multiple sprints, CLAUDE.md, retros, and a set of conventions to follow. An engineer sitting down at the start of a session — especially if they've been away for a few days or joined recently — has to reconstruct "where are we?" before doing anything. That reconstruction is slow and error-prone. Worse, it's the exact moment when skipping steps is easiest, because nobody is watching.
 
 State-check collapses that reconstruction into a 30-second run that tells you:
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-state-check.py — Repo state detector for the AI-Assisted Development Method.
+state-check.py — Repo state detector for the AI-Assisted Development Method (AADM).
 
 Detects which mode the repo is in (client delivery v3.2.1 or Internal Product
 Mode), which stage/phase is active, and flags anything that requires attention.
@@ -529,7 +529,7 @@ def print_human_report(state: ModeState) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Detect current state of a repo using the AI-Assisted Development Method."
+        description="Detect current state of a repo using the AI-Assisted Development Method (AADM)."
     )
     parser.add_argument("--repo-root", default=".", help="Repository root (default: cwd).")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")

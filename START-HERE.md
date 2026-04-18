@@ -1,6 +1,6 @@
-# AI-Assisted Development Method — Final Bundle (v3.2.1)
+# AI-Assisted Development Method (AADM) — Final Bundle (v3.2.1)
 
-This bundle contains everything needed to adopt the AI-Assisted Development Method on a new or existing client repo. Read this file first, then follow the "Getting Started" steps below.
+This bundle contains everything needed to adopt AADM on a new or existing client repo. Read this file first, then follow the "Getting Started" steps below.
 
 ## What's in this bundle
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-reconcile.py — Sprint coverage check for the AI-Assisted Development Method.
+reconcile.py — Sprint coverage check for the AI-Assisted Development Method (AADM).
 
 Parses sprints/vN/PRD.md for requirement IDs and sprints/vN/TASKS.md for
 `Satisfies:` citations. For each requirement, verifies that either:

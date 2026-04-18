@@ -1,4 +1,4 @@
-# AI-Assisted Development Method
+# AI-Assisted Development Method (AADM)
 
 **Version 3.2.1**
 
@@ -224,7 +224,7 @@ In most enterprise engagements, the client does not hand you a complete design d
 
 **Phase 0 sub-phases:**
 
-- **0a. Discovery.** Structured 1:1 conversations with the people who will use the system and the people who will sign off on acceptance. Fill in the client intake template at `docs/intake/<CLIENT>-<DATE>.md` (see the AI-Assisted Development Method bundle for the template). Every `[REQUIRED]` field must be filled — "UNKNOWN — need to ask X" is acceptable but counts as an open question.
+- **0a. Discovery.** Structured 1:1 conversations with the people who will use the system and the people who will sign off on acceptance. Fill in the client intake template at `docs/intake/<CLIENT>-<DATE>.md` (see the AADM bundle for the template). Every `[REQUIRED]` field must be filled — "UNKNOWN — need to ask X" is acceptable but counts as an open question.
 - **0b. Design-doc drafting.** Your tech lead (with Claude Code assist) drafts `docs/<INITIATIVE>.md` from the intake. Ten to fifteen pages for a first-milestone-worth of scope, not fifty. Use the prompt at the bottom of the intake template to hand the intake to Claude Code as structured input.
 - **0c. Ambiguity pass on the draft.** Claude Code lists every ambiguity in the drafted design doc. Questions get answered by follow-up with the client. Resolved questions become Qn IDs in the design doc.
 - **0d. Client review.** The client reads the draft, pushes back, negotiates scope. Output: a signed-off design document with stable IDs.
