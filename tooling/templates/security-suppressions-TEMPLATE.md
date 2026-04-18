@@ -4,6 +4,8 @@
 
 Every `# nosemgrep` (or equivalent) comment in the codebase must have a matching entry here. An unannotated suppression is a silent exception to the security gate — it defeats the whole point of having the gate.
 
+> **Multi-tool note.** This template assumes Semgrep. If you add other scanners (Bandit uses `# nosec`, ESLint uses `// eslint-disable-next-line`, Trivy uses `#trivy:ignore`, etc.), record the tool in the `Rule:` field (e.g. `bandit: B602`) and extend the removal ceremony to cover that tool's suppression syntax. The 90-day re-review discipline applies tool-agnostically.
+
 Entries are re-reviewed every 90 days. [state-check.py](../state-check/scripts/state-check.py) flags entries older than that as P2. Re-review means one of:
 
 - Remove the suppression (the rule now applies).

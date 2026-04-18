@@ -18,16 +18,28 @@ name: Security
 #     `semgrep/semgrep:1.98.0` or similar.
 #   - Teams running on Semgrep AppSec Platform: set SEMGREP_APP_TOKEN in
 #     repository secrets and swap the `scan` line for `semgrep ci`.
+#   - Extending to other tools: if you add Bandit (# nosec), Trivy, or similar
+#     alongside Semgrep, extend the `Rule:` field in suppressions.md to name the
+#     tool + rule, and the removal ceremony to cover all active suppression
+#     syntaxes. The 90-day ceremony and state-check staleness flag apply
+#     tool-agnostically.
 
 on:
   pull_request:
   push:
     branches: [main]
 
+# Least-privilege: the job only reads repo contents. If you adopt the CodeQL
+# SARIF upload (see TODO below), add `security-events: write`.
+permissions:
+  contents: read
+
 jobs:
   semgrep:
     name: Semgrep scan
     runs-on: ubuntu-latest
+    # Guardrail against a runaway scan on a very large repo.
+    timeout-minutes: 15
     container:
       image: semgrep/semgrep:latest
 
@@ -44,6 +56,12 @@ jobs:
             --metrics=off \
             --sarif --output=semgrep.sarif
 
+      # TODO: swap this step for `github/codeql-action/upload-sarif@v3` so
+      # findings surface in the GitHub Security tab and annotate the PR diff
+      # directly, instead of sitting as a download-only artifact. Requires
+      # adding `security-events: write` to the `permissions:` block above.
+      # Deferred: `actions/upload-artifact` keeps the template dependency-free
+      # for teams not using GitHub Advanced Security.
       - name: Upload SARIF
         if: always()
         uses: actions/upload-artifact@v4
