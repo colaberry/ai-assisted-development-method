@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code local settings (per-user, not for the repo)
+.claude/settings.local.json
+
+# Editors
+*.swp
+.idea/
+.vscode/

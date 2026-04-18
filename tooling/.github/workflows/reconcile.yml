@@ -1,0 +1,63 @@
+name: Sprint Coverage Check
+
+# Runs the /reconcile script on every PR that touches an active sprint
+# directory. Blocks merges when sprint requirements are not covered.
+#
+# Assumes:
+#   - Sprint directories live under sprints/vN/
+#   - The "active" sprint is the one without a .lock file
+#   - scripts/reconcile.py is in the repo
+
+on:
+  pull_request:
+    paths:
+      - 'sprints/**'
+      - 'src/**'
+      - 'lib/**'
+      - 'app/**'
+      # Tune these paths to match where your code lives.
+
+jobs:
+  reconcile:
+    name: Sprint coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Find the active sprint
+        id: find-sprint
+        run: |
+          # The active sprint is the highest-numbered sprints/vN/ without a .lock file.
+          # If there's no unlocked sprint, skip the check.
+          set -e
+          ACTIVE=""
+          for dir in $(ls -d sprints/v*/ 2>/dev/null | sort -V); do
+            if [ ! -f "${dir}.lock" ]; then
+              ACTIVE="${dir%/}"
+            fi
+          done
+          if [ -z "$ACTIVE" ]; then
+            echo "No active sprint found; skipping reconcile check."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Active sprint: $ACTIVE"
+            echo "sprint_dir=$ACTIVE" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run reconcile
+        if: steps.find-sprint.outputs.skip == 'false'
+        run: |
+          python3 scripts/reconcile.py "${{ steps.find-sprint.outputs.sprint_dir }}" --ci
+
+      - name: Emit coverage summary
+        if: steps.find-sprint.outputs.skip == 'false' && always()
+        run: |
+          # Non-blocking human-readable summary, included in the PR check output.
+          python3 scripts/reconcile.py "${{ steps.find-sprint.outputs.sprint_dir }}" || true
