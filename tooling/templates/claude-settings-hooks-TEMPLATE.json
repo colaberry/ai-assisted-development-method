@@ -1,0 +1,16 @@
+{
+  "_comment": "Drop the contents of `hooks` below into your client repo's .claude/settings.json (merge with any existing keys). The sprint_gate.py hook blocks Write/Edit/MultiEdit/NotebookEdit operations under sprints/vK/ when any earlier sprint sprints/vJ/ is missing a .lock file. See tooling/hooks/sprint_gate.py for behavior, install steps, and the design rationale.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/sprint_gate.py"
+          }
+        ]
+      }
+    ]
+  }
+}

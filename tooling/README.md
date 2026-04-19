@@ -138,6 +138,30 @@ python3 scripts/sprint_close.py sprints/v3 --json
 
 Exit code `0` means locked (or, with `--dry-run`, would have locked). Exit code `1` means at least one check failed and `.lock` was not written. There is no partial-close path.
 
+## How the sprint-gate PreToolUse hook works
+
+[`sprint_gate.py`](hooks/sprint_gate.py) is the structural complement to `sprint_close.py`. Where `sprint_close.py` decides *when* to write `.lock`, the hook decides *what the agent is allowed to touch* based on whose `.lock` files exist.
+
+On every `Write`, `Edit`, `MultiEdit`, or `NotebookEdit` the hook:
+
+1. Extracts the target `file_path` from the tool input.
+2. If it's under `sprints/vK/...`, lists every `sprints/vJ/` dir in the repo.
+3. If any `J < K` is missing a `.lock`, blocks the write with exit code 2 and a stderr message naming the unlocked sprints.
+
+This turns the anti-skip rule from cultural ("please don't start v2 before v1 is closed") into structural (you literally cannot). The hook is permissive by design: if it can't parse its input, doesn't recognize the tool, or can't find the repo root, it exits 0 and allows the operation. It's a reminder, not a security boundary.
+
+**Install in a client repo:**
+
+```bash
+mkdir -p .claude/hooks
+cp /path/to/tooling/hooks/sprint_gate.py .claude/hooks/
+chmod +x .claude/hooks/sprint_gate.py
+# Then merge the hooks: block from templates/claude-settings-hooks-TEMPLATE.json
+# into .claude/settings.json.
+```
+
+**What it does NOT do:** it doesn't block writes to already-locked sprints (retroactive edits to a closed retro are still allowed — people do fix typos), and it doesn't care about Read/Bash. Tighten if your team needs it; keep `evaluate()` in the hook as the single decision point.
+
 ## What this bundle does NOT include
 
 Intentionally out of scope for day-one tooling:
