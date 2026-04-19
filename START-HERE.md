@@ -42,6 +42,41 @@ This bundle contains everything needed to adopt AADM on a new or existing client
 
 ## Reading order
 
+```mermaid
+flowchart TD
+    Start(["Who are you?"])
+    Start --> TL["Tech lead / PM<br/>(framework decisions)"]
+    Start --> Eng["Engineer<br/>(writing code)"]
+    Start --> New["New engineer<br/>(onboarding)"]
+    Start --> Internal["Building internally<br/>(might become SaaS)"]
+    Start --> Blocked["Can't adopt full<br/>bundle right now"]
+    Start --> Lost["Unsure what to<br/>work on right now"]
+
+    TL --> TLRead["method/ first (60-90 min)"]
+    TLRead --> TLInt["internal-mode/ if you ship<br/>internal products"]
+    TLInt --> TLHB["handbook/ for onboarding others"]
+
+    Eng --> EngRead["handbook/ first (45 min)"]
+    EngRead --> EngMethod["method/ for rationale"]
+    EngMethod --> EngState["state-check/ on session start"]
+
+    New --> NewPath["handbook/ + project CLAUDE.md<br/>+ recent docs/failures/<br/>+ /state-check"]
+
+    Internal --> IntRead["internal-mode/ (calibrated for<br/>exploration -> validation -><br/>commercialization)"]
+
+    Blocked --> MVA["MINIMUM-VIABLE-ADOPTION.md<br/>(CLAUDE.md + stable IDs +<br/>Satisfies: + reconcile.py in CI)"]
+
+    Lost --> StateCheck["python3 state-check/scripts/state-check.py<br/>or /state-check in Claude Code"]
+
+    style Start fill:#1f2937,color:#fff
+    style TLRead fill:#064e3b,color:#fff
+    style EngRead fill:#064e3b,color:#fff
+    style NewPath fill:#064e3b,color:#fff
+    style IntRead fill:#064e3b,color:#fff
+    style MVA fill:#064e3b,color:#fff
+    style StateCheck fill:#064e3b,color:#fff
+```
+
 - **Tech leads and PMs:** Read `method/` first (60–90 min). Read `internal-mode/` if you build products internally. Reference `handbook/` when onboarding engineers.
 - **Engineers:** Read `handbook/` first (45 min). Reference `method/` for context and rationale. Install and use `state-check/` when starting a session or switching contexts.
 - **New engineer onboarding:** `handbook/` + your project's CLAUDE.md + most recent entries in `docs/failures/` + run `/state-check` or `state-check.py` to orient. That's enough to contribute.

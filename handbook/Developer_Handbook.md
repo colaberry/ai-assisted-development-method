@@ -12,6 +12,46 @@ It is deliberately concise. If you're looking for the philosophy, read the main 
 
 ---
 
+## The per-task loop at a glance
+
+```mermaid
+flowchart TD
+    Start(["New task from TASKS.md"])
+    Start --> Read["Read docs/failures/<br/>entries touching this domain"]
+    Read --> Matrix["Design test matrix<br/>A happy, B edge, C error,<br/>D fallthrough, E arch guards"]
+    Matrix --> MatrixCheck{"Every test has a<br/>one-line guard note?"}
+    MatrixCheck -->|"no"| Matrix
+    MatrixCheck -->|"yes"| Red["Session 1: write tests ONLY<br/>commit failing (red)"]
+
+    Red --> Close1["Close Claude Code session"]
+    Close1 --> Green["Session 2: implement<br/>read committed tests as input<br/>do NOT reread session 1"]
+
+    Green --> Local{"Tests pass locally?"}
+    Local -->|"no"| Green
+    Local -->|"yes"| Symbol["Verify symbols in task title<br/>+ Acceptance: appear in Files:<br/>(reconcile.py symbol-presence check)"]
+
+    Symbol --> Session["log-session at session end<br/>metrics.py log-session --kind dev --task Tn"]
+    Session --> Mark["Mark task [x] with Completed: date"]
+
+    Mark --> PR["Open PR"]
+    PR --> CI{{"CI: reconcile.py --ci<br/>+ security.yml (Semgrep)"}}
+    CI -->|"pass"| Merge["Squash merge"]
+    CI -.->|"fail"| Fix["Fix, push, rerun"]
+    Fix --> CI
+
+    Stuck(["Stuck on third<br/>fix-still-broken loop?"]) -.->|"re-specify"| Matrix
+
+    style Matrix fill:#064e3b,color:#fff
+    style Red fill:#7f1d1d,color:#fff
+    style Green fill:#064e3b,color:#fff
+    style CI fill:#1e3a8a,color:#fff
+    style Stuck fill:#78350f,color:#fff
+```
+
+Red boxes are where tests live failing on disk. Green boxes are forward progress. Blue is CI enforcement. Orange is the re-specify escape hatch — if you're in a loop, the problem is underspecification, not a missing tweak.
+
+---
+
 ## Part 1: Daily practices
 
 ### 1.1 Writing a good `Satisfies:` line

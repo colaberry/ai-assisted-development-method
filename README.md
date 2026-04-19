@@ -41,6 +41,42 @@ Read [START-HERE.md](START-HERE.md) first. It covers the reading order (60–90 
 
 If you want to adopt AADM on an existing project but can't take a full-bundle bootstrap, read [MINIMUM-VIABLE-ADOPTION.md](MINIMUM-VIABLE-ADOPTION.md) instead — four pieces (CLAUDE.md + stable IDs + `Satisfies:` + `reconcile.py` in CI) under a day, compatible with adopting the rest later.
 
+## The enforcement pipeline
+
+```mermaid
+flowchart LR
+    Design["Design doc<br/>docs/INITIATIVE.md<br/>(stable IDs)"] -->|"Satisfies:"| PRD
+    SOW["Contract<br/>docs/contract/SOW.md<br/>(SOW-#X.Y IDs)"] -->|"Satisfies:"| Design
+
+    PRD["/prd vN<br/>sprints/vN/PRD.md<br/>+ TASKS.md"]
+    PRD --> Dev["/dev<br/>one task per session<br/>tests in separate session"]
+
+    Dev --> PR["Open PR"]
+
+    PR --> GR{{"reconcile.py --ci"}}
+    PR --> GS{{"security.yml<br/>(Semgrep)"}}
+    GR -->|"pass"| Close
+    GS -->|"pass"| Close
+    GR -.->|"fail"| Block["Merge blocked"]
+    GS -.->|"fail"| Block
+
+    Close["/sprint-close<br/>- runs reconcile again<br/>- /retro, /walkthrough<br/>- /security-review if in scope<br/>- /ui-qa if in scope<br/>- check_sessions_logged"]
+    Close --> Lock{{"sprint_close.py<br/>writes .lock"}}
+    Lock -->|"locked"| NextPRD["/prd vN+1<br/>(unblocked)"]
+    Lock -.->|"any check fails"| Refuse["Refuses; no .lock written"]
+
+    Hook["sprint_gate.py<br/>PreToolUse hook"] -.->|"blocks Edit/Write under<br/>sprints/vN+1 until .lock"| NextPRD
+
+    style GR fill:#1e3a8a,color:#fff
+    style GS fill:#1e3a8a,color:#fff
+    style Lock fill:#1e3a8a,color:#fff
+    style Block fill:#7f1d1d,color:#fff
+    style Refuse fill:#7f1d1d,color:#fff
+    style Close fill:#064e3b,color:#fff
+```
+
+Blue = structural gate (non-skippable). Red = refusal path. Green = ceremony. Every box maps to a script or a skill in the tooling.
+
 ## Reading order by role
 
 - **Tech leads and PMs:** [method/](method/) first. Read [internal-mode/](internal-mode/) if you build products internally. Reference [handbook/](handbook/) when onboarding engineers.
