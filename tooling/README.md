@@ -3,6 +3,7 @@
 This bundle contains the minimum tooling to start using the method on a new client repo:
 
 - A working `/reconcile` script (Python, stdlib only)
+- A `sprint_close.py` script that atomically closes a sprint after running `/reconcile` and verifying RETRO + sign-off
 - A GitHub Actions workflow that runs `/reconcile` as a CI merge gate
 - Templates for CLAUDE.md, the failures log, retrospectives, and sprint artifacts
 
@@ -10,7 +11,8 @@ This bundle contains the minimum tooling to start using the method on a new clie
 
 ```
 scripts/
-└── reconcile.py                    # Sprint coverage check
+├── reconcile.py                    # Sprint coverage check
+└── sprint_close.py                 # Atomic sprint closure (writes .lock)
 .github/workflows/
 └── reconcile.yml                   # CI integration
 templates/
@@ -27,10 +29,11 @@ templates/
 From the root of a fresh client repo:
 
 ```bash
-# 1. Copy the reconcile script
+# 1. Copy the scripts
 mkdir -p scripts
 cp /path/to/tooling/scripts/reconcile.py scripts/
-chmod +x scripts/reconcile.py
+cp /path/to/tooling/scripts/sprint_close.py scripts/
+chmod +x scripts/reconcile.py scripts/sprint_close.py
 
 # 2. Wire the CI check
 mkdir -p .github/workflows
@@ -106,11 +109,40 @@ python3 scripts/reconcile.py sprints/v1 --ci --strict-symbols
 python3 scripts/reconcile.py sprints/v1 --repo-root /path/to/repo
 ```
 
+## How `sprint_close.py` works
+
+When you're ready to close a sprint, this is the one entry point. It:
+
+1. Confirms the sprint has `PRD.md` and `TASKS.md` and isn't already locked.
+2. Runs `reconcile.py --ci` against the sprint. Pass `--strict-symbols` to also fail on empty stubs.
+3. Verifies `RETRO.md` is no longer the template (no `<placeholder>`, no literal `vN`, no literal `YYYY-MM-DD`, and the "What went well" / "What went poorly" sections contain real content).
+4. Verifies sign-off — either an existing `SIGNOFF.md` containing `Reviewer: <name>` and `Date: YYYY-MM-DD`, or `--reviewer NAME` to create one.
+5. Writes `sprints/vN/.lock` only if every check above passed. The `.lock` file records `locked_at`, `reviewer`, and `reconcile_status` — downstream tooling (the planned PreToolUse hook) reads this to know the sprint is closed.
+
+```bash
+# Close v3 with the reviewer recorded inline
+python3 scripts/sprint_close.py sprints/v3 --reviewer "Jane Doe"
+
+# Use a pre-existing SIGNOFF.md
+python3 scripts/sprint_close.py sprints/v3
+
+# Run all checks but never write .lock — useful for CI smoke tests
+python3 scripts/sprint_close.py sprints/v3 --dry-run
+
+# Strict mode: also fail on tasks whose files exist but contain no symbol
+python3 scripts/sprint_close.py sprints/v3 --strict-symbols --reviewer "Alex"
+
+# JSON output for tooling integration
+python3 scripts/sprint_close.py sprints/v3 --json
+```
+
+Exit code `0` means locked (or, with `--dry-run`, would have locked). Exit code `1` means at least one check failed and `.lock` was not written. There is no partial-close path.
+
 ## What this bundle does NOT include
 
 Intentionally out of scope for day-one tooling:
 
-- **`/sprint-close`, `/walkthrough`, `/gap`, `/security-review`, `/ui-qa` automation.** These are higher-leverage to build later once the team has used the basic pieces and knows what shape each one needs. Start with manual checklists invoked as Claude Code slash commands; promote to scripts when the manual process stabilizes.
+- **`/walkthrough`, `/gap`, `/security-review`, `/ui-qa` automation.** These are higher-leverage to build later once the team has used the basic pieces and knows what shape each one needs. Start with manual checklists invoked as Claude Code slash commands; promote to scripts when the manual process stabilizes. (Sprint close itself is now scripted via `sprint_close.py`; security is gated structurally via `security.yml`.)
 - **Mutation testing setup.** Language-specific; set up with Stryker / mutmut / PIT when you pick the critical modules.
 - **`docs/patterns/` folder for positives.** Per v3.2 guidance, do not pre-emptively add this until you have a clear signal the team needs it.
 
