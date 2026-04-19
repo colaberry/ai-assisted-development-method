@@ -448,6 +448,8 @@ A realistic list of what will feel wrong in your first month using the method, a
 
 **After the first commercialized client delivery:** run a retrospective on the method itself. What actually helped? What felt like overhead? What failure modes did it catch? What did it miss? Bring that retro back for a calibration conversation.
 
+**Calibrating from real data.** The [`metrics/`](../metrics/) module logs every gate event (reconcile pass/fail, security pass/fail) to `docs/metrics/events.jsonl` automatically from CI. After ~5 sprints, run `python3 scripts/metrics.py list-events` and look for patterns: which gate fails most? Are failures clustered in particular sprints? Did failure rates drop after a process change? Phase 1 is gate events only; session-level token tracking and rework-reason logging arrive in Phase 2 once threshold ranges have been validated against real teams. Read [`metrics/docs/METRICS.md`](../metrics/docs/METRICS.md) before relying on the numbers — the "When to stop tracking" section is especially worth respecting.
+
 ---
 
 ## Appendix: What to read next
