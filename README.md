@@ -39,6 +39,8 @@ The method operates at two levels:
 
 Read [START-HERE.md](START-HERE.md) first. It covers the reading order (60–90 min for tech leads, 45 min for engineers) and the bootstrap steps for a new client repo.
 
+If you want to adopt AADM on an existing project but can't take a full-bundle bootstrap, read [MINIMUM-VIABLE-ADOPTION.md](MINIMUM-VIABLE-ADOPTION.md) instead — four pieces (CLAUDE.md + stable IDs + `Satisfies:` + `reconcile.py` in CI) under a day, compatible with adopting the rest later.
+
 ## Reading order by role
 
 - **Tech leads and PMs:** [method/](method/) first. Read [internal-mode/](internal-mode/) if you build products internally. Reference [handbook/](handbook/) when onboarding engineers.
