@@ -74,6 +74,16 @@ SUPPRESSION_REMOVED_RE = re.compile(
 # Stale threshold for security suppressions (days).
 SUPPRESSION_STALE_DAYS = 90
 
+# "**Resolved:** YYYY-MM-DD ..." line inside an incident post-mortem.
+# A post-mortem without a resolved timestamp is treated as an open incident.
+# Matches bold, non-bold, colon-present, colon-absent variants, and rejects
+# the literal template placeholder "<YYYY-MM-DD ...>" and the bare token
+# "YYYY-MM-DD" — only real dates count as resolved.
+INCIDENT_RESOLVED_RE = re.compile(
+    r"^\s*\*{0,2}Resolved:?\*{0,2}\s*(?P<value>.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 # =====================================================================
 # Data classes
@@ -524,6 +534,69 @@ def check_sprint_state(sprint: Path, mode: str) -> list[Flag]:
     return flags
 
 
+def _incident_is_open(text: str) -> bool:
+    """True if the post-mortem lacks a real `Resolved:` timestamp.
+
+    A post-mortem is open when none of the `Resolved:` lines carries a
+    concrete value — empty field, literal template placeholder, or the
+    bare `YYYY-MM-DD` token all count as unresolved.
+    """
+    for m in INCIDENT_RESOLVED_RE.finditer(text):
+        value = m.group("value").strip()
+        if not value:
+            continue
+        # Strip surrounding angle brackets / asterisks / backticks that
+        # a template might carry.
+        stripped = value.strip("<>`* ")
+        if not stripped:
+            continue
+        if stripped.upper() == "YYYY-MM-DD":
+            continue
+        if stripped.startswith("YYYY-MM-DD"):
+            continue
+        # Real date present — incident is closed.
+        return False
+    return True
+
+
+def check_open_incidents(repo: Path) -> Optional[Flag]:
+    """Flag incident post-mortems that are still open.
+
+    Scans `docs/incidents/` for markdown entries (excluding README and
+    TEMPLATE) and counts any without a filled-in `Resolved:` timestamp.
+    Open incidents mean the learning loop hasn't closed: even if the
+    production fix is live, the prevention rule might not be in place
+    yet and the post-mortem review might not have happened.
+    """
+    incidents_dir = repo / "docs" / "incidents"
+    if not incidents_dir.is_dir():
+        return None
+    entries = [
+        p for p in incidents_dir.iterdir()
+        if p.is_file() and p.suffix == ".md" and p.stem not in ("README", "TEMPLATE")
+    ]
+    open_entries: list[str] = []
+    for entry in entries:
+        try:
+            text = entry.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if _incident_is_open(text):
+            open_entries.append(entry.name)
+    if not open_entries:
+        return None
+    open_entries.sort()
+    preview = ", ".join(open_entries[:3])
+    if len(open_entries) > 3:
+        preview += f" (+{len(open_entries) - 3} more)"
+    return Flag(
+        severity="P1",
+        category="learning-loop",
+        message=f"{len(open_entries)} open incident post-mortem(s) without a `Resolved:` timestamp: {preview}",
+        suggested_action="Close each incident via /incident: add the Resolved: timestamp, cross-link a failures-log entry, and land the prevention rule on an enforcement surface.",
+    )
+
+
 def check_test_modifications(repo: Path) -> Optional[Flag]:
     modified = git_recent_test_modifications(repo)
     if modified:
@@ -679,6 +752,7 @@ def run_state_check(repo: Path) -> ModeState:
         check_claude_md_size,
         check_claude_md_placeholders,
         check_failures_log_size,
+        check_open_incidents,
         check_test_modifications,
         check_security_suppressions_staleness,
     ):

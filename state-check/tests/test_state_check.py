@@ -281,5 +281,102 @@ class SecuritySuppressionsStalenessTests(unittest.TestCase):
             self.assertNotIn("S004", flag.message)
 
 
+class IncidentIsOpenTests(unittest.TestCase):
+    def test_bold_resolved_with_real_date_is_closed(self):
+        self.assertFalse(sc._incident_is_open("**Resolved:** 2026-04-18 14:32 PST"))
+
+    def test_plain_resolved_with_date_is_closed(self):
+        self.assertFalse(sc._incident_is_open("Resolved: 2026-04-18"))
+
+    def test_empty_resolved_field_is_open(self):
+        self.assertTrue(sc._incident_is_open("**Resolved:**\n"))
+
+    def test_template_placeholder_is_open(self):
+        self.assertTrue(sc._incident_is_open("**Resolved:** <YYYY-MM-DD HH:MM timezone>"))
+
+    def test_bare_yyyy_mm_dd_token_is_open(self):
+        self.assertTrue(sc._incident_is_open("**Resolved:** YYYY-MM-DD"))
+
+    def test_missing_resolved_line_is_open(self):
+        self.assertTrue(sc._incident_is_open("Some post-mortem with no Resolved field at all"))
+
+    def test_multiple_resolved_lines_any_real_date_closes(self):
+        body = (
+            "**Resolved:** YYYY-MM-DD\n"
+            "...\n"
+            "**Resolved:** 2026-04-18 15:00 UTC\n"
+        )
+        self.assertFalse(sc._incident_is_open(body))
+
+
+class CheckOpenIncidentsTests(unittest.TestCase):
+    def _write_incident(self, repo: Path, name: str, body: str) -> None:
+        incidents = repo / "docs" / "incidents"
+        incidents.mkdir(parents=True, exist_ok=True)
+        (incidents / name).write_text(body, encoding="utf-8")
+
+    def test_no_directory_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(sc.check_open_incidents(Path(tmp)))
+
+    def test_no_incidents_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "docs" / "incidents").mkdir(parents=True)
+            self.assertIsNone(sc.check_open_incidents(repo))
+
+    def test_all_resolved_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_incident(
+                repo, "2026-04-10-auth.md", "**Resolved:** 2026-04-10 12:00 UTC\n"
+            )
+            self._write_incident(
+                repo, "2026-04-12-payments.md", "Resolved: 2026-04-12 16:00 UTC\n"
+            )
+            self.assertIsNone(sc.check_open_incidents(repo))
+
+    def test_open_incident_flagged_p1(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_incident(
+                repo, "2026-04-15-webhook.md", "**Resolved:**\n"
+            )
+            flag = sc.check_open_incidents(repo)
+            self.assertIsNotNone(flag)
+            self.assertEqual(flag.severity, "P1")
+            self.assertEqual(flag.category, "learning-loop")
+            self.assertIn("2026-04-15-webhook.md", flag.message)
+
+    def test_template_and_readme_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_incident(repo, "TEMPLATE.md", "**Resolved:** <YYYY-MM-DD>\n")
+            self._write_incident(repo, "README.md", "header")
+            self.assertIsNone(sc.check_open_incidents(repo))
+
+    def test_multiple_open_incidents_truncated_in_preview(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            for slug in ("a", "b", "c", "d", "e"):
+                self._write_incident(
+                    repo, f"2026-04-0{ord(slug)-96}-{slug}.md", "**Resolved:**\n"
+                )
+            flag = sc.check_open_incidents(repo)
+            self.assertIsNotNone(flag)
+            self.assertIn("(+2 more)", flag.message)
+
+    def test_template_placeholder_treated_as_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_incident(
+                repo, "2026-04-15-fresh.md",
+                "**Resolved:** <YYYY-MM-DD HH:MM timezone>\n"
+            )
+            flag = sc.check_open_incidents(repo)
+            self.assertIsNotNone(flag)
+            self.assertIn("2026-04-15-fresh.md", flag.message)
+
+
 if __name__ == "__main__":
     unittest.main()

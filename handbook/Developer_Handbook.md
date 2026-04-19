@@ -200,6 +200,34 @@ Both gates exist for the same reason: AI-generated code is plausible enough to p
 
 The manual `/security-review` checklist remains — as the *escalation path*, not the only layer. Use it when the Semgrep finding is ambiguous, when you're touching authentication/authorization/cryptography, or when the suppression would affect a SOW-level security requirement.
 
+### 1.10 Closing the loop after a production incident: `/incident`
+
+AADM's gates stop at `/sprint-close`. Everything between "code merged" and "customer-visible outage" is outside the method's pre-merge scope by design — that's what production monitoring, alerting, and on-call processes are for. But once an incident is over, **what you learn from it has to feed back into the pre-merge surfaces or the same class of bug will recur.** That's what `/incident` is for.
+
+The symptom that `/incident` fixes: every team that has been shipping for a while has a "this is the third time we've hit this" moment — a regression whose root cause was identified months ago, discussed in Slack, maybe even written up in a doc, but never promoted to a *check that runs on every PR*. The failures log, CLAUDE.md, and the test matrix are where prevention actually lives; the post-mortem is just where the decision is made to put it there.
+
+**When to invoke `/incident`:**
+
+- Immediately after an incident is mitigated — not during.
+- When a client reports a material defect that made it through sprint-close.
+- When discovering a latent bug (shipped but hadn't yet manifested visibly).
+
+**What `/incident` does, in order:**
+
+1. Confirms the incident is actually over. Running a post-mortem during an active page produces bad post-mortems.
+2. Creates `docs/incidents/<YYYY-MM-DD>-<slug>.md` from `tooling/templates/incident-TEMPLATE.md`.
+3. Walks you through the template section by section, pushing back on vague answers: "around 3pm" → what time exactly; "some users" → how many; "communication was bad" → what specifically.
+4. Asks explicitly whether the incident invalidated a requirement or ADR. If yes: a separate design-doc update PR or a superseding ADR is drafted. Silent edits to the spec destroy traceability.
+5. Extracts a specific, actionable **prevention rule**. "Write better tests" is rejected. "Token-expiry tests must advance real or fake-but-advancing time past the expiry threshold between generation and validation" is accepted.
+6. Creates the corresponding `docs/failures/` entry and cross-links it to the incident.
+7. Names the **enforcement surface** where the rule will actually run: CLAUDE.md never-do rule, CI check, architecture-guard test (Category E), `/security-review` prompt lens, or test-matrix discipline. A rule that lives only in the failures log will not catch the next occurrence.
+
+**What `/incident` does not do.** It does not decide severity, page people, assign blame, or close the incident. `Resolved:` goes in when a human confirms the fix is live and stable. The `Post-mortem review` section is filled in after the review meeting (within 5 business days). Until both are filled, `state-check.py` flags the incident as a P1 learning-loop issue.
+
+**The three-strike rule.** If this is the third time you've hit the same class of bug, the existing prevention rules aren't working. Flag that prominently in the post-mortem's "Related entries" section and be explicit about why the prior rule failed — was it not on an enforcement surface, was the surface disabled, or was the rule too narrow to catch this variant? The fix there is process, not another failures-log entry.
+
+**`/incident` does not replace on-call.** On-call is about mitigation, communication, and stakeholder updates during the event. `/incident` is about learning after. Different tools for different moments.
+
 ---
 
 ## Part 2: Prompting Claude Code within the method
