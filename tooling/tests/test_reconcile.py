@@ -320,5 +320,109 @@ class CLIIntegrationTests(unittest.TestCase):
             self.assertIn("_routes_differ", entry["matched_symbols"])
 
 
+class AutonomyAnnotationTests(unittest.TestCase):
+    """Parsing and validation of the optional `Autonomy:` subline."""
+
+    def _parse(self, tasks_md: str):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks_file = Path(tmp) / "TASKS.md"
+            tasks_file.write_text(tasks_md, encoding="utf-8")
+            return r.parse_tasks(tasks_file)
+
+    def test_direct_level_parsed(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Satisfies: §1.1\n"
+            "  - Autonomy: direct\n"
+        )
+        self.assertEqual(tasks[0].autonomy, "direct")
+        self.assertTrue(tasks[0].autonomy_valid)
+
+    def test_checkpoint_level_parsed(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Satisfies: §1.1\n"
+            "  - Autonomy: checkpoint\n"
+        )
+        self.assertEqual(tasks[0].autonomy, "checkpoint")
+        self.assertTrue(tasks[0].autonomy_valid)
+
+    def test_review_only_level_parsed(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Satisfies: §1.1\n"
+            "  - Autonomy: review-only\n"
+        )
+        self.assertEqual(tasks[0].autonomy, "review-only")
+        self.assertTrue(tasks[0].autonomy_valid)
+
+    def test_uppercase_normalized(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Autonomy: DIRECT\n"
+        )
+        self.assertEqual(tasks[0].autonomy, "direct")
+        self.assertTrue(tasks[0].autonomy_valid)
+
+    def test_unknown_level_marked_invalid(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Autonomy: yolo\n"
+        )
+        self.assertEqual(tasks[0].autonomy, "yolo")
+        self.assertFalse(tasks[0].autonomy_valid)
+
+    def test_missing_annotation_is_none(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Satisfies: §1.1\n"
+        )
+        self.assertIsNone(tasks[0].autonomy)
+        self.assertTrue(tasks[0].autonomy_valid)  # absent is fine
+
+    def test_subline_does_not_break_other_parsing(self):
+        tasks = self._parse(
+            "- [ ] T001: title\n"
+            "  - Autonomy: checkpoint\n"
+            "  - Satisfies: §1.1, §1.2\n"
+            "  - Files: src/a.py\n"
+        )
+        self.assertEqual(tasks[0].satisfies, ["§1.1", "§1.2"])
+        self.assertEqual(tasks[0].files, ["src/a.py"])
+        self.assertEqual(tasks[0].autonomy, "checkpoint")
+
+    def test_invalid_value_warns_to_stderr_via_cli(self):
+        script = Path(__file__).resolve().parent.parent / "scripts" / "reconcile.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            tasks_md = (
+                "## Tasks\n\n"
+                "- [x] T001: Wire `_routes_differ` into `load_ref`\n"
+                "  - Satisfies: D1, D2\n"
+                "  - Acceptance: `_routes_differ` is set when `load_ref` matches.\n"
+                "  - Files: src/threading.py\n"
+                "  - Autonomy: typo-here\n"
+                "- [DEFERRED] T002: Out of scope\n"
+                "  - Satisfies: D3\n"
+                "  - Status: DEFERRED\n"
+                "  - Target: v2\n"
+            )
+            sprint = _make_sprint(repo, PRD_FIXTURE, tasks_md)
+            (repo / "src").mkdir()
+            (repo / "src" / "threading.py").write_text(
+                "def load_ref(): _routes_differ = True\n"
+            )
+            res = subprocess.run(
+                ["python3", str(script), str(sprint),
+                 "--ci", "--repo-root", str(repo)],
+                capture_output=True, text=True,
+            )
+            self.assertIn("WARNING", res.stderr)
+            self.assertIn("typo-here", res.stderr)
+            self.assertIn("T001", res.stderr)
+            # Invalid autonomy must NOT fail the gate.
+            self.assertEqual(res.returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
