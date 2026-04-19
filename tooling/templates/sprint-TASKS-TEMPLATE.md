@@ -12,6 +12,14 @@ The `/reconcile` script parses this file. Format must be preserved:
 - The `Satisfies:` subline lists requirement IDs separated by commas or spaces.
 - The `Files:` subline lists paths the task touches, comma-separated.
 
+**Optional `Autonomy:` annotation.** Each task may declare how much human checkpointing `/dev` should do while executing it. Valid values:
+
+- `direct` — Claude proceeds task end-to-end; reviewer sees the diff. Use for low-risk, well-tested, easily reversible work (refactors with strong test coverage, doc updates, isolated utility additions).
+- `checkpoint` — Claude pauses at intermediate milestones for confirmation. The default. Use for ordinary feature work.
+- `review-only` — every step requires explicit human go-ahead before continuing. Use for high-risk changes: security boundaries, payment paths, schema migrations, anything touching production data.
+
+Tie the level to actual risk and test coverage, not to how much you trust the engineer or the model. A task with thin Category D fallthrough coverage on production-touching code is `review-only` even if the diff looks small. `reconcile.py` parses `Autonomy:` and warns on unknown values; `/dev` (when scripted) reads it to tune confirmation cadence.
+
 ---
 
 ## Tasks
@@ -21,6 +29,7 @@ The `/reconcile` script parses this file. Format must be preserved:
   - Acceptance: <one-line acceptance criterion>
   - Files: src/path/to/file.py, tests/path/to/test_file.py
   - Tests required: A (happy), B (empty-input edge), D (pre-existing fallthrough)
+  - Autonomy: checkpoint
   - Notes: <any implementation notes>
 
 - [ ] T002: <Short task title>
@@ -28,12 +37,14 @@ The `/reconcile` script parses this file. Format must be preserved:
   - Acceptance: <criterion>
   - Files: <paths>
   - Tests required: A, C (error on invalid input), E (guards against regression of deleted symbol `old_handler`)
+  - Autonomy: review-only
 
 - [x] T003: <Completed task title>
   - Satisfies: Q3
   - Acceptance: <criterion>
   - Files: src/auth/session.py
   - Tests required: A, B, D
+  - Autonomy: direct
   - Completed: YYYY-MM-DD
 
 - [DEFERRED] T004: <Deferred task title>

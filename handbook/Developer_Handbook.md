@@ -200,7 +200,39 @@ Both gates exist for the same reason: AI-generated code is plausible enough to p
 
 The manual `/security-review` checklist remains — as the *escalation path*, not the only layer. Use it when the Semgrep finding is ambiguous, when you're touching authentication/authorization/cryptography, or when the suppression would affect a SOW-level security requirement.
 
-### 1.10 Closing the loop after a production incident: `/incident`
+### 1.10 Tuning autonomy with `Autonomy:` annotations
+
+Not every task carries the same risk. A doc fix is not a payment-path migration. The `Autonomy:` annotation on a task lets you tell `/dev` how much human checkpointing to do mid-task — instead of using one cadence for everything.
+
+Three valid levels:
+
+- **`direct`** — Claude proceeds end-to-end; the reviewer sees the diff at the end. Use for low-risk, well-tested, easily reversible work: refactors with strong existing test coverage, doc updates, isolated utility additions, mechanical renames.
+- **`checkpoint`** — Claude pauses at intermediate milestones for confirmation. **The default.** Use for ordinary feature work — new endpoints, schema additions, business-logic changes that have tests and aren't security-sensitive.
+- **`review-only`** — every step requires explicit human go-ahead before continuing. Use for high-risk changes: security boundaries, payment paths, schema migrations, anything touching production data, anything where rollback is hard.
+
+The annotation sits in the task block alongside `Satisfies:`, `Files:`, etc.:
+
+```markdown
+- [ ] T012: Migrate `users.email` to encrypted-at-rest column
+  - Satisfies: §6.4, SOW-§9.1
+  - Files: db/migrations/0042_encrypt_user_email.sql, src/users/storage.py
+  - Tests required: A, B, C, D, E
+  - Autonomy: review-only
+```
+
+**How to pick the level.** Tie it to actual risk and test coverage, not to how much you trust the engineer or the model:
+
+- Strong Category D (fallthrough) coverage on production-touching code? Can drop from `review-only` to `checkpoint`.
+- No tests at all on a critical path? Should be `review-only` even if the diff is small.
+- Mechanical change with E (architecture-guard) tests in place? `direct` is fine.
+
+If you're unsure, default to `checkpoint`. Going one level more cautious costs minutes; going one level less cautious can ship a regression.
+
+**What the tooling does with it.** `reconcile.py` parses `Autonomy:` and surfaces invalid values to stderr (`yolo` is not a level). It does not currently fail on autonomy alone — the annotation is advisory. Once the `/dev` skill ships, it reads this field to decide checkpointing cadence. Even before then, the annotation serves as documentation for human reviewers: a PR landing a `review-only` task with no checkpoint comments in the conversation history is a smell worth surfacing in code review.
+
+**What the annotation does not replace.** It does not replace test coverage, the security gate, or the test matrix. `Autonomy: direct` does not mean "skip Category D"; it means "given that the test matrix is satisfied, proceed without mid-task pauses." If you're tempted to use `direct` to cut testing, the testing is the problem to solve, not the cadence.
+
+### 1.11 Closing the loop after a production incident: `/incident`
 
 AADM's gates stop at `/sprint-close`. Everything between "code merged" and "customer-visible outage" is outside the method's pre-merge scope by design — that's what production monitoring, alerting, and on-call processes are for. But once an incident is over, **what you learn from it has to feed back into the pre-merge surfaces or the same class of bug will recur.** That's what `/incident` is for.
 

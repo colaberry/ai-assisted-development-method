@@ -90,6 +90,18 @@ TARGET_RE = re.compile(
 STATUS_DEFERRED_RE = re.compile(
     r"^\s+(?:[-*]\s+)?Status:\s*DEFERRED\s*$", re.IGNORECASE
 )
+AUTONOMY_RE = re.compile(
+    r"^\s+(?:[-*]\s+)?Autonomy:\s*(?P<level>\S+)\s*$", re.IGNORECASE
+)
+
+# Valid Autonomy: levels. The annotation tunes how often /dev pauses for
+# human confirmation:
+#   direct       — Claude proceeds task end-to-end; reviewer sees the diff
+#   checkpoint   — Claude pauses at intermediate milestones (default)
+#   review-only  — every step requires human go-ahead before continuing
+# An unknown value is parsed and surfaced as `unknown` so reviewers can
+# correct it; reconcile does not fail on bad values.
+VALID_AUTONOMY_LEVELS = {"direct", "checkpoint", "review-only"}
 
 # Symbol-extraction patterns.
 #
@@ -146,6 +158,8 @@ class Task:
     files: list[str] = field(default_factory=list)
     acceptance: Optional[str] = None
     target: Optional[str] = None  # for deferred tasks
+    autonomy: Optional[str] = None  # "direct" | "checkpoint" | "review-only"
+    autonomy_valid: bool = True  # False when the parsed value is not in VALID_AUTONOMY_LEVELS
 
 
 @dataclass
@@ -262,6 +276,13 @@ def parse_tasks(tasks_path: Path) -> list[Task]:
 
             if STATUS_DEFERRED_RE.match(line):
                 current.status = "deferred"
+                continue
+
+            autonomy_match = AUTONOMY_RE.match(line)
+            if autonomy_match:
+                level = autonomy_match.group("level").strip().lower().rstrip(".,;")
+                current.autonomy = level
+                current.autonomy_valid = level in VALID_AUTONOMY_LEVELS
 
     if current is not None:
         tasks.append(current)
@@ -571,6 +592,19 @@ def main() -> int:
 
     requirements = parse_prd(prd_path)
     tasks = parse_tasks(tasks_path)
+
+    # Surface invalid Autonomy: values to stderr. The annotation is optional;
+    # parse failures don't fail reconcile, but a typo'd level is worth seeing.
+    bad_autonomy = [
+        t for t in tasks if t.autonomy is not None and not t.autonomy_valid
+    ]
+    for t in bad_autonomy:
+        sys.stderr.write(
+            f"WARNING: task {t.id} has Autonomy: {t.autonomy!r} which is not one of "
+            f"{sorted(VALID_AUTONOMY_LEVELS)}. The annotation is parsed but downstream "
+            f"tooling (/dev) will treat it as the default 'checkpoint'.\n"
+        )
+
     entries = build_coverage(
         requirements, tasks, repo_root, strict_symbols=args.strict_symbols
     )
