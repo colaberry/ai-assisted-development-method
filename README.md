@@ -47,6 +47,7 @@ Read [START-HERE.md](START-HERE.md) first. It covers the reading order (60–90 
 
 ## Tooling
 
+- **[sprint_close.py](tooling/scripts/sprint_close.py)** — atomic sprint closure. Runs `reconcile.py --ci`, verifies `RETRO.md` is filled (no template markers, sections 1-2 have real content), verifies `SIGNOFF.md` exists with `Reviewer:` + `Date:` (or accepts `--reviewer NAME` to create one), then writes `sprints/vN/.lock` recording who closed the sprint and when. No partial closures. Python stdlib only.
 - **[reconcile.py](tooling/scripts/reconcile.py)** — sprint coverage check. Verifies every PRD requirement is satisfied by a completed task or marked `[DEFERRED]`, that listed `Files:` exist, and (new) that symbols extracted from each task's title and `Acceptance:` line actually appear in those files — closes the "empty stub passes reconcile" hole. `--strict-symbols` opts into hard-failing on stubs. Python stdlib only. Runs in CI via [reconcile.yml](tooling/.github/workflows/reconcile.yml) as a merge gate.
 - **[security.yml](tooling/.github/workflows/security.yml)** — Semgrep-based security merge gate. Blocks PRs on any ERROR-severity finding. Deliberate suppressions live in [docs/security/suppressions.md](tooling/templates/security-suppressions-TEMPLATE.md) with a 90-day re-review ceremony enforced by `state-check.py`.
 - **[state-check.py](state-check/scripts/state-check.py)** — detects current repo state (mode, stage, active sprint, flags). Heads-up display, not autopilot. Ships with a [Claude Code skill](state-check/.claude/skills/state-check.md) for conversational use.
@@ -55,7 +56,7 @@ Read [START-HERE.md](START-HERE.md) first. It covers the reading order (60–90 
 
 ## What this deliberately does NOT include yet
 
-- **Automation for `/sprint-close`, `/gap`, `/ui-qa`** — currently manual checklists. Promote to scripts after the manual process has stabilized on at least one engagement. (Security has moved from checklist to structural gate via [security.yml](tooling/.github/workflows/security.yml); manual `/security-review` remains as the escalation path for deeper human review.)
+- **Automation for `/gap`, `/ui-qa`** — currently manual checklists. Promote to scripts after the manual process has stabilized on at least one engagement. (Security has moved from checklist to structural gate via [security.yml](tooling/.github/workflows/security.yml); manual `/security-review` remains as the escalation path for deeper human review. `/sprint-close` is now scripted via [sprint_close.py](tooling/scripts/sprint_close.py).)
 - **Enforcement hooks** — a PreToolUse hook blocking cross-sprint writes is on the roadmap. Until it ships, the anti-skip gate is cultural for sprint boundaries and automated only for `/reconcile`.
 - **Skill bundle** — the `/prd`, `/dev`, `/sprint-close` skills that would wrap the enforcement scripts are on the roadmap. See [CHANGELOG.md](CHANGELOG.md) for what's planned.
 - **Mutation testing setup** — language-specific; add when you pick critical modules.
