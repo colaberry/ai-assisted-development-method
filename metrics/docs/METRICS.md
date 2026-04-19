@@ -1,10 +1,20 @@
-# Development Metrics — Schema and Interpretation Guide (Phase 1)
+# Development Metrics — Schema and Interpretation Guide
 
 *How the metrics system works, what each metric means, and how to interpret the output*
 
 This document covers the metrics system added to the AI-Assisted Development Method (AADM). It pairs with [`metrics.py`](../scripts/metrics.py).
 
-> **Phase 1 scope.** This release ships **gate events only**. The CLI exposes `log-gate` and `list-events`. Session-level token tracking, rework reasons, sprint-over-sprint trend analysis, and retro auto-sections are deferred to Phase 2 (issue [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)) until at least one engagement has produced calibration data. The threshold ranges that would interpret session/token data have not been validated against real teams; shipping them now would be guessing dressed up as metrics.
+> **What ships today.**
+>
+> - **Gate events** (Phase 1, #12 — stable): `log-gate` records every structural-gate pass/fail. Wired into [`reconcile.yml`](../../tooling/.github/workflows/reconcile.yml) and [`security.yml`](../../tooling/.github/workflows/security.yml) via `if: always()`.
+> - **Session events** (Phase 2 partial, #13): `log-session` records a sprint-tagged work session. `sprint_close.py` refuses to lock a sprint with zero logged session events — the discipline is structural, not cultural. The retro template has a Session metrics section that pulls raw counts from the event log.
+>
+> **What is deliberately NOT shipped yet:**
+>
+> - **Interpretation ranges for sessions/rework/tokens.** The low/healthy/high thresholds that would label a sprint "high rework" or "healthy session volume" are NOT in this doc yet. Calibrating them against simulated data produces metrics that mislead more than they inform. They land in a follow-up issue once at least one real engagement has run 3+ sprints under both Phase 1 and Phase 2 logging.
+> - **Per-engineer attribution.** Never, any phase. See anti-patterns below.
+> - **Token / cost auto-calculation.** Deferred with the thresholds.
+> - **Automated retro rollup CLI.** The retro template pulls raw counts manually via `list-events`; a `retro-section` subcommand lands with the calibrated thresholds.
 
 ---
 
@@ -26,7 +36,7 @@ Two goals, in order of importance:
 
 ## What gets recorded
 
-Phase 1 records one event type. Each event is an append-only JSON line in `docs/metrics/events.jsonl`. Events are immutable — if something is wrong, log a correcting event; don't edit history.
+Two event types land as append-only JSON lines in `docs/metrics/events.jsonl`. Events are immutable — if something is wrong, log a correcting event; don't edit history.
 
 ### Event type: `gate`
 
@@ -42,6 +52,23 @@ Logged every time a structural gate runs — typically called automatically from
 | `findings_count` | Optional. Number of findings (relevant for `gap`, or for `security` if you want to record non-zero finding counts on PRs that still passed) |
 
 Gate events are the highest-signal lowest-cost metric you can capture. They take five seconds of CI config and they tell you whether the method is catching things.
+
+### Event type: `session`
+
+Logged at the end of every work session — whether it's a `/dev` task, a test-authoring session in a separate context, a code review, or an ad-hoc investigation. The logging is done by the engineer (or the skill wrapping the engineer's session) via `log-session`, and `sprint_close.py` structurally refuses to lock a sprint with zero logged sessions. That turns session logging from cultural discipline into a hard gate.
+
+| Field | Meaning |
+|---|---|
+| `ts` | ISO 8601 timestamp (auto) |
+| `event_type` | `session` |
+| `sprint` | Sprint name like `v3` (auto-detected if not specified) |
+| `kind` | One of: `dev`, `tests`, `review`, `other` |
+| `task` | Optional. Task ID like `T007` if the session was scoped to one task. |
+| `rework` | Optional boolean. `true` if the session was rework on already-closed work (revisiting a completed task because of a regression, missed edge case, or post-merge issue). |
+
+**Why the `rework` flag.** Rework rate is the single highest-signal indicator that a sprint's scope or spec quality is off. A sprint with 40% rework sessions is telling you something the gate-pass rate is not. We record it today so that when thresholds are calibrated, the data is already there. Until then: record honestly, discuss in retro, don't react to single-sprint numbers.
+
+**What is deliberately NOT in this schema.** No `engineer` field — individual attribution creates bad incentives and doesn't answer any method-calibration question. No token counts — they're coming once cost-per-sprint becomes worth tracking against real engagement data. No `duration` field — durations self-report badly (engineers over-report short sessions and under-report long ones) and aren't worth the noise.
 
 ---
 
@@ -66,11 +93,30 @@ The `if: always()` is critical — without it the step is skipped when `reconcil
 
 ### From a developer terminal
 
-For ad-hoc logging — e.g. when running `/gap` manually:
+For ad-hoc gate logging — e.g. when running `/gap` manually:
 
 ```bash
 python3 metrics/scripts/metrics.py log-gate --gate gap --result pass --findings 7
 ```
+
+### Logging a work session
+
+At the end of every `/dev` session, test-authoring session, or code review:
+
+```bash
+# Ordinary dev session on a specific task
+python3 metrics/scripts/metrics.py log-session --kind dev --task T007
+
+# Test-authoring session (separate context, per the method rule)
+python3 metrics/scripts/metrics.py log-session --kind tests --task T007
+
+# Rework on an already-closed task
+python3 metrics/scripts/metrics.py log-session --kind dev --task T004 --rework
+```
+
+`sprint_close.py` will refuse to write `.lock` if zero session events exist for the sprint. That makes the discipline structural: forgetting to log means the sprint doesn't close.
+
+If the `metrics/` module isn't installed in the target repo (minimum-viable adoption path: CLAUDE.md + stable IDs + `Satisfies:` + `reconcile.py` only), the session check passes with a "not installed" note and `sprint_close.py` proceeds without blocking. The structural requirement applies only when the team has opted into metrics logging.
 
 ---
 
@@ -103,7 +149,20 @@ python3 metrics/scripts/metrics.py list-events --sprint v3
 python3 metrics/scripts/metrics.py list-events --json
 ```
 
-Phase 1 doesn't ship a `show-sprint` rollup CLI — `list-events` plus a five-line shell pipe gets you the same answer for the only event type that exists. The richer rollup commands are Phase 2.
+For session counts:
+
+```bash
+# Count sessions in the current sprint (auto-detected)
+python3 metrics/scripts/metrics.py count-sessions
+
+# Count sessions in a specific sprint, as JSON
+python3 metrics/scripts/metrics.py count-sessions --sprint v3 --json
+
+# Just session events, one per line
+python3 metrics/scripts/metrics.py list-events --event-type session --sprint v3
+```
+
+The retro template's Session metrics section pulls raw counts from these commands. Rollup commands that would *interpret* the counts (healthy / high / low thresholds, rework-rate alerts, sprint-over-sprint trends) are deferred until real engagement data calibrates the ranges — see the opening caveat.
 
 ---
 
@@ -190,4 +249,9 @@ Tools are levers. If the lever isn't moving anything, put it down.
 | Filter by sprint or gate | `metrics.py list-events --sprint v3 --gate security` |
 | Emit as JSON | `metrics.py list-events --json` |
 
-**Default mental model for Phase 1:** wire `log-gate` into every gate workflow with `if: always()`. Read `list-events` at sprint close. Defer everything else (token tracking, rework reasons, rollups) until [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13) — the data is worth more once the schema has been validated against real engagements.
+| Log a session event | `metrics.py log-session --kind dev --task T007` |
+| Mark a session as rework | `metrics.py log-session --kind dev --task T004 --rework` |
+| Count sessions for a sprint | `metrics.py count-sessions --sprint v3 --json` |
+| List just session events | `metrics.py list-events --event-type session --sprint v3` |
+
+**Default mental model.** Wire `log-gate` into every gate workflow with `if: always()`. Log a session event at the end of every `/dev` / test-authoring / review session — the `sprint_close.py` check will bounce the lock if you don't. Read the raw session counts in retro. Defer threshold-based interpretation (healthy / high / low) until real engagement data calibrates the ranges in a follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13).

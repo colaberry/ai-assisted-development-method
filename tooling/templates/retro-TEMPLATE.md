@@ -80,7 +80,18 @@ For each new rule, this retro drafts the failures-log entry. A human reviewer sh
 
 ---
 
-## 6. Method calibration
+## 6. Session metrics
+
+> **Why this section exists.** `metrics/scripts/metrics.py log-session` is logged at the end of every work session. `sprint_close.py` refuses to lock a sprint with zero logged sessions, so by the time you are filling this retro you have a real count. Fill the numbers below from `python3 metrics/scripts/metrics.py list-events --sprint vN --event-type session --json`. The **interpretation ranges are not calibrated yet** — they are coming in a follow-up gated on real engagement data. For now, record the raw counts and any qualitative observations; do not act on "high / low" labels the tooling is not yet qualified to assign.
+
+- **Total sessions this sprint:** <count>
+- **By kind:** dev=<n>, tests=<n>, review=<n>, other=<n>
+- **Rework sessions:** <count>  *(sessions logged with `--rework`)*
+- **Observations:** <Anything notable? e.g. "rework concentrated in T004; root cause was the missing ambiguity pass" — specific beats summary. Blank is fine if nothing stood out.>
+
+---
+
+## 7. Method calibration
 
 <Briefly: is the method serving us? Are any gates being skipped? Any overhead that feels disproportionate to value?>
 
@@ -92,7 +103,7 @@ For each new rule, this retro drafts the failures-log entry. A human reviewer sh
 
 ---
 
-## 7. Actions
+## 8. Actions
 
 Who does what by when. Keep to 5 items max; more means the retro is accumulating instead of acting.
 

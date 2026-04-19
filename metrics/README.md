@@ -1,18 +1,21 @@
-# Metrics (Phase 1)
+# Metrics
 
-A lightweight development metrics system for the AI-Assisted Development Method (AADM). Phase 1 ships **gate event logging only** — every time a structural gate (`reconcile`, `security`, `gap`, `ui_qa`, `sprint_close`) runs, an append-only JSONL record captures the result. Designed to be called from CI so no engineer discipline is required.
+A lightweight development metrics system for the AI-Assisted Development Method (AADM). Two event types ship today:
 
-Token-level session metrics, rework-reason tracking, and retro auto-sections are deferred to [Phase 2 (#13)](https://github.com/colaberry/ai-assisted-development-method/issues/13). Threshold ranges that would interpret session data have not been validated; shipping them now would be guessing dressed up as metrics.
+- **Gate events** (Phase 1, stable) — every time a structural gate (`reconcile`, `security`, `gap`, `ui_qa`, `sprint_close`) runs, an append-only JSONL record captures the result. Called from CI; no engineer discipline required.
+- **Session events** (Phase 2 partial, [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)) — logged by the engineer at session end. `sprint_close.py` refuses to lock a sprint with zero logged sessions, so the discipline is structural not cultural. The retro template has a Session metrics section populated from raw counts.
+
+**Deliberately not shipped yet:** threshold ranges that would *interpret* session counts (healthy / high / low, rework-rate alerts, tokens/session). Calibrating them against simulated data produces metrics that mislead more than they inform. They land in a follow-up once at least one real engagement has run 3+ sprints under both Phase 1 gate logging and Phase 2 session logging.
 
 ## What's here
 
 ```
 scripts/
-└── metrics.py           # log-gate + list-events
+└── metrics.py           # log-gate, log-session, count-sessions, list-events
 docs/
-└── METRICS.md           # Schema, CI wiring, interpretation, anti-patterns, deferred items
+└── METRICS.md           # Schema, CI wiring, session logging, anti-patterns, deferred items
 tests/
-└── test_metrics.py      # Unit tests
+└── test_metrics.py      # Unit tests (32 tests)
 ```
 
 ## Getting started on a client repo
@@ -42,15 +45,19 @@ python3 scripts/metrics.py log-gate --gate reconcile --result pass
 # Manually after running /gap
 python3 scripts/metrics.py log-gate --gate gap --result pass --findings 7
 
-# Read what's been captured
-python3 scripts/metrics.py list-events --sprint v3
+# At the end of every work session (required by sprint_close.py)
+python3 scripts/metrics.py log-session --kind dev --task T007
+python3 scripts/metrics.py log-session --kind tests --task T007
+python3 scripts/metrics.py log-session --kind dev --task T004 --rework
+
+# Count sessions; read what's been captured
+python3 scripts/metrics.py count-sessions --sprint v3
+python3 scripts/metrics.py list-events --event-type session --sprint v3
 ```
 
 ## Persistence — important caveat
 
-In Phase 1, events written from CI on a PR branch are lost on squash merge (PR branches are ephemeral). The `Logged gate ...` line still appears in the Actions run log — you have visibility, just not aggregation across PRs.
-
-Phase 2 (#13) adds a commit-back pattern from CI on merged PRs. Until then, the highest-value events to capture are the ones engineers log locally: `/gap` runs, `/sprint-close` outcomes, and any gate run on `main` directly.
+Events written from CI on a PR branch are lost on squash merge (PR branches are ephemeral). The `Logged gate ...` line still appears in the Actions run log — you have visibility, just not aggregation across PRs. A future follow-up adds a commit-back pattern from CI on merged PRs; until then, the highest-value events to capture are the ones engineers log locally: `/gap` runs, `/sprint-close` outcomes, session events, and any gate run on `main` directly.
 
 ## Honest caveats
 
@@ -66,4 +73,4 @@ Phase 2 (#13) adds a commit-back pattern from CI on merged PRs. Until then, the 
 
 ## Version
 
-0.1 — Phase 1, gate events only. Phase 2 (#13) lands when one engagement has produced ≥3 sprints of Phase 1 data.
+0.2 — gate events (Phase 1) + session events with structural `sprint_close.py` refusal (Phase 2 partial, #13). Threshold calibration lands in a follow-up when one engagement has produced ≥3 sprints of combined gate + session data.

@@ -64,6 +64,7 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 - **RETRO.md still has template markers.** Re-run the retro walk-through. The placeholders exist because no one filled them in; the fix is filling them in, not deleting them.
 - **`reconcile.py --ci` fails with a missing requirement.** Either the requirement needs a task (re-open the sprint briefly, add the task, run `/dev`), or it needs a `[DEFERRED]` entry with `Target:` and `Reason:`. Silent drop is not an option.
 - **Symbol-presence `STUB-WARNING:` on a `[x]` task.** The task claims to be done but the files don't contain the symbols the title/acceptance imply. Either finish the implementation or un-mark the task.
+- **`sessions_logged` fails with "no session events logged for vN".** `sprint_close.py` refuses to lock a sprint with zero logged sessions when the `metrics/` module is installed. The fix is honesty: if sessions happened and weren't logged, log them retroactively from memory; if you genuinely never logged any, that's the signal the discipline hasn't landed yet and the retro should call it out. If the repo is on the minimum-viable adoption path (no `metrics/` module), the check passes with a "not installed" note — this refusal mode only fires for teams that opted into metrics logging.
 - **No SIGNOFF.md and `--reviewer` not passed.** Pass `--reviewer NAME` or get a reviewer to create SIGNOFF.md and re-run.
 
 ## Interaction with other skills

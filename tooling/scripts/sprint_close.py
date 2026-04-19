@@ -241,6 +241,74 @@ def _has_real_content(body: str) -> bool:
     return False
 
 
+def find_metrics_script(repo_root: Path) -> Optional[Path]:
+    """Look for metrics.py in the conventional locations."""
+    for rel in ("metrics/scripts/metrics.py", "scripts/metrics.py"):
+        candidate = repo_root / rel
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _count_session_events(events_file: Path, sprint: str) -> int:
+    if not events_file.is_file():
+        return 0
+    count = 0
+    try:
+        with events_file.open("r", encoding="utf-8") as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    evt = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if evt.get("event_type") == "session" and evt.get("sprint") == sprint:
+                    count += 1
+    except OSError:
+        return 0
+    return count
+
+
+def check_sessions_logged(
+    sprint_dir: Path,
+    repo_root: Path,
+) -> CheckResult:
+    """Refuse to lock a sprint with zero logged session events.
+
+    Structural, not cultural: without this check a team can drift into
+    sprint-closing without ever logging a session, and the retro metrics
+    section has nothing to feed on. If no metrics module is installed at
+    all, the check passes with a note — metrics/ is optional for the
+    minimum-viable adoption path.
+    """
+    metrics_script = find_metrics_script(repo_root)
+    if metrics_script is None:
+        return CheckResult(
+            "sessions_logged",
+            True,
+            "metrics/ not installed; session logging is optional for this repo",
+        )
+    events_file = repo_root / "docs" / "metrics" / "events.jsonl"
+    n = _count_session_events(events_file, sprint_dir.name)
+    if n == 0:
+        return CheckResult(
+            "sessions_logged",
+            False,
+            (
+                f"no session events logged for {sprint_dir.name} — run "
+                f"`python3 {metrics_script.relative_to(repo_root)} log-session "
+                f"--kind dev` at session end, at least once per sprint"
+            ),
+        )
+    return CheckResult(
+        "sessions_logged",
+        True,
+        f"{n} session event(s) logged for {sprint_dir.name}",
+    )
+
+
 def check_signoff(
     sprint_dir: Path,
     reviewer_arg: Optional[str],
@@ -320,6 +388,7 @@ def run_close(
 
     report.checks.append(check_reconcile(sprint_dir, repo_root, strict_symbols))
     report.checks.append(check_retro_filled(sprint_dir))
+    report.checks.append(check_sessions_logged(sprint_dir, repo_root))
 
     signoff_result, reviewer = check_signoff(sprint_dir, reviewer_arg)
     report.checks.append(signoff_result)
