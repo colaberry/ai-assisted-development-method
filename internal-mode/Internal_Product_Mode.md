@@ -43,7 +43,7 @@ Internal products move through three stages. Each stage has different rules. The
 | **Mutation testing** | Skip on feature code; apply to shared libraries only | Monthly on critical modules | Monthly, as in v3.2.1 |
 | **Failures log** | Mandatory, same as client work | Same | Same |
 | **CLAUDE.md** | Mandatory, same | Same | Same |
-| **Test matrix** | A + C required; B/D/E if time permits | A + B + C + D required; E where structurally relevant | All five categories, as in v3.2.1 |
+| **Test matrix** | A + C required; D required where code touches existing production systems; B/E if time permits | A + B + C + D required; E where structurally relevant | All five categories, as in v3.2.1 |
 | **What the sprint PRD must include** | A hypothesis + what we expect to learn + a kill signal | Hypothesis + user-behavior metric to watch + acceptance criteria | Acceptance criteria tied to stable IDs |
 | **Dogfooding** | First-class activity — the team is the primary user | First-class — expand beyond the team | Optional if clients can be the validators |
 
@@ -84,7 +84,7 @@ Each `/sprint-close` answers one additional question beyond the v3.2.1 checklist
 ### What's lighter in Stage 1
 
 - **No `/gap` runs.** The doc changes faster than gap audits are useful. Pick it back up in Stage 2.
-- **Test matrix: A (happy path) and C (error paths) required; B, D, E only if time permits.** Exploration code has a higher chance of being thrown away; full test coverage on code that won't ship is waste. The Category E architecture guards are specifically the ones that matter *if* you commercialize — so when you graduate to Stage 2, you'll add them retroactively to code that survives.
+- **Test matrix: A (happy path) and C (error paths) required everywhere; D (fallthrough) required wherever the code touches existing production systems; B (boundaries) and E (architecture guards) only if time permits.** Exploration code has a higher chance of being thrown away; full test coverage on code that won't ship is waste. The exception is D where production data or behavior is at stake — silent fallthroughs into prod are too painful to retrofit. The Category E architecture guards specifically are the ones that matter *if* you commercialize — so when you graduate to Stage 2, you'll add them retroactively to code that survives.
 - **`/security-review` is light.** OWASP basics (injection, auth fundamentals), STRIDE only if the feature crosses a trust boundary. No external clients means lower acute risk.
 - **Mutation testing on shared libraries only.** Feature code in Stage 1 isn't worth mutation-testing because much of it gets rewritten before Stage 2.
 - **`/walkthrough` is thin.** A page, not three. The format: "here's what we built, here's the learning section, here's what changed in the hypothesis doc."
@@ -102,7 +102,7 @@ Each `/sprint-close` answers one additional question beyond the v3.2.1 checklist
 - ✗ Shipping a feature with no attached hypothesis or learning goal. If you can't articulate what you'll learn, you shouldn't build it yet.
 - ✗ Ignoring the kill signal when it triggers. The kill signal exists to prevent sunk-cost escalation. If it fires and you ignore it, you didn't have a real kill signal.
 - ✗ Skipping the failures log "because it's just a prototype." Prototype bugs are a signal source, not throwaway noise.
-- ✗ Treating code quality as optional. You will ship some of this. Category D (fallthrough) is the one that's easiest to defer and most painful to retrofit later — apply it wherever the code touches existing production systems.
+- ✗ Treating code quality as optional. You will ship some of this. Category D (fallthrough) is the one that's easiest to defer and most painful to retrofit later — and per the test matrix above, it's required wherever the code touches existing production systems, not optional.
 
 ---
 
@@ -191,7 +191,7 @@ The second graduation gate. This one is often a business decision as much as an 
 
 - **A clear commercialization plan.** Who buys this, at what price, through what channel, and why would they choose it over alternatives.
 - **An identified first client or segment.** Either a specific paying pilot client or a clearly defined early-adopter segment with evidence that they'll pay.
-- **Retention evidence, not just trial evidence.** Users keep coming back without being prompted.
+- **Retention evidence, not just trial evidence.** A concrete, pre-committed retention metric must clear a pre-committed threshold. Default starting point: **≥40% of Stage 2 users return self-directed (no nudge, no scheduled session) in at least 3 of the 4 weeks following their first meaningful use.** Pick the metric and threshold *before* you read the data, and write them into your Stage 2 PRD; otherwise the gate becomes "I think it's enough" with extra steps. The 40%/3-of-4 default is a starting heuristic for B2B SaaS-style products with weekly use cadence — for daily-use products tighten it (e.g., DAU/WAU ≥ 0.5); for monthly-use compliance tooling loosen the cadence but keep the self-directed requirement. What does not count: prompted return (the team Slacked them), single-session try-it (no return), or aggregate "users used it" without a per-user cohort cut.
 - **An engineering readiness assessment.** What in the codebase needs to be re-done with client-grade rigor before external exposure? This becomes the first Stage 3 initiative.
 - **A commitment from your team to the commercialization timeline.** External clients mean SLAs, support, and commitments. If the team can't commit to that, don't cross the gate.
 

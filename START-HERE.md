@@ -46,6 +46,7 @@ This bundle contains everything needed to adopt AADM on a new or existing client
 - **Engineers:** Read `handbook/` first (45 min). Reference `method/` for context and rationale. Install and use `state-check/` when starting a session or switching contexts.
 - **New engineer onboarding:** `handbook/` + your project's CLAUDE.md + most recent entries in `docs/failures/` + run `/state-check` or `state-check.py` to orient. That's enough to contribute.
 - **Building something internally that might become SaaS:** Read `internal-mode/` — it's a companion process calibrated for the exploration → validation → commercialization lifecycle.
+- **Can't adopt the full bundle right now:** Read [MINIMUM-VIABLE-ADOPTION.md](MINIMUM-VIABLE-ADOPTION.md) — the four-piece path (CLAUDE.md + stable IDs + `Satisfies:` + `reconcile.py` in CI) you can land in a day on an existing project.
 - **Unsure what to work on right now:** Run `python3 state-check/scripts/state-check.py` or `/state-check` in Claude Code.
 
 ## What this method is
