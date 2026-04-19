@@ -49,6 +49,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Semgrep
+        id: semgrep
         run: |
           semgrep scan \
             --config=auto \
@@ -79,7 +80,7 @@ jobs:
         if: always()
         run: |
           if [ -f scripts/metrics.py ]; then
-            if [ "${{ job.status }}" = "success" ]; then
+            if [ "${{ steps.semgrep.outcome }}" = "success" ]; then
               python3 scripts/metrics.py log-gate --gate security --result pass
             else
               python3 scripts/metrics.py log-gate --gate security --result fail

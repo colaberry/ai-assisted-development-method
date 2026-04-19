@@ -33,9 +33,7 @@ RESULT_CHOICES = ("pass", "fail")
 
 
 def metrics_dir(repo: Path) -> Path:
-    d = repo / "docs" / "metrics"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return repo / "docs" / "metrics"
 
 
 def events_file(repo: Path) -> Path:
@@ -65,6 +63,7 @@ def detect_active_sprint(repo: Path) -> Optional[str]:
 
 def append_event(repo: Path, event: dict) -> None:
     f = events_file(repo)
+    f.parent.mkdir(parents=True, exist_ok=True)
     with f.open("a", encoding="utf-8") as fp:
         fp.write(json.dumps(event, separators=(",", ":")) + "\n")
 

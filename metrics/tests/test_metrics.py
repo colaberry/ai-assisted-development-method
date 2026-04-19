@@ -54,11 +54,24 @@ def _ns(**kwargs) -> argparse.Namespace:
 
 
 class HelpersTests(unittest.TestCase):
-    def test_metrics_dir_creates_path(self):
+    def test_metrics_dir_returns_path_without_creating(self):
+        # Read-path callers (load_events, list-events) must not materialize
+        # docs/metrics/ — only append_event creates it.
         with tempfile.TemporaryDirectory() as tmp:
             d = m.metrics_dir(Path(tmp))
-            self.assertTrue(d.is_dir())
             self.assertEqual(d, Path(tmp) / "docs" / "metrics")
+            self.assertFalse(d.exists())
+
+    def test_load_events_does_not_create_metrics_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(m.load_events(Path(tmp)), [])
+            self.assertFalse((Path(tmp) / "docs" / "metrics").exists())
+
+    def test_append_event_creates_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            m.append_event(repo, {"event_type": "gate", "gate": "reconcile", "result": "pass"})
+            self.assertTrue((repo / "docs" / "metrics" / "events.jsonl").is_file())
 
     def test_iso_now_is_parseable_utc(self):
         from datetime import datetime
@@ -71,6 +84,11 @@ class HelpersTests(unittest.TestCase):
 class DetectActiveSprintTests(unittest.TestCase):
     def test_no_sprints_dir_returns_none(self):
         with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(m.detect_active_sprint(Path(tmp)))
+
+    def test_empty_sprints_dir_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "sprints").mkdir()
             self.assertIsNone(m.detect_active_sprint(Path(tmp)))
 
     def test_picks_highest_unlocked(self):
@@ -132,6 +150,15 @@ class LogGateTests(unittest.TestCase):
             self.assertEqual(events[0]["findings_count"], 7)
             self.assertNotIn("findings_count", events[1])
 
+    def test_findings_zero_is_recorded(self):
+        # 0 findings is a meaningful signal (clean security run); must not be
+        # confused with "no count provided" by the `is not None` check.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_gate(_ns(gate="gap", result="pass", findings=0), repo)
+            self.assertEqual(m.load_events(repo)[0]["findings_count"], 0)
+
     def test_appends_does_not_truncate(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -167,6 +194,7 @@ class LoadEventsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             f = m.events_file(repo)
+            f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(
                 json.dumps({"event_type": "gate", "gate": "reconcile", "result": "pass"})
                 + "\n\n  \n"
@@ -181,6 +209,7 @@ class LoadEventsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             f = m.events_file(repo)
+            f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(
                 "{not json\n"
                 + json.dumps({"event_type": "gate", "gate": "reconcile", "result": "pass"})

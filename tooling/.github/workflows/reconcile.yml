@@ -52,6 +52,7 @@ jobs:
           fi
 
       - name: Run reconcile
+        id: reconcile
         if: steps.find-sprint.outputs.skip == 'false'
         run: |
           python3 scripts/reconcile.py "${{ steps.find-sprint.outputs.sprint_dir }}" --ci
@@ -71,7 +72,7 @@ jobs:
         if: steps.find-sprint.outputs.skip == 'false' && always()
         run: |
           if [ -f scripts/metrics.py ]; then
-            if [ "${{ job.status }}" = "success" ]; then
+            if [ "${{ steps.reconcile.outcome }}" = "success" ]; then
               python3 scripts/metrics.py log-gate --gate reconcile --result pass
             else
               python3 scripts/metrics.py log-gate --gate reconcile --result fail
