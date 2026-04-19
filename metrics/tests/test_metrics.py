@@ -41,12 +41,16 @@ m = _load_metrics()
 
 
 def _ns(**kwargs) -> argparse.Namespace:
-    """Build an argparse.Namespace with sensible Phase 1 defaults."""
+    """Build an argparse.Namespace with sensible defaults."""
     defaults = {
         "sprint": None,
         "gate": None,
         "result": None,
         "findings": None,
+        "kind": None,
+        "task": None,
+        "rework": False,
+        "event_type": None,
         "json": False,
     }
     defaults.update(kwargs)
@@ -183,6 +187,93 @@ class LogGateTests(unittest.TestCase):
             with _silence_stdout():
                 m.cmd_log_gate(_ns(gate="reconcile", result="fail"), repo)
             self.assertIsNone(m.load_events(repo)[0]["sprint"])
+
+
+class LogSessionTests(unittest.TestCase):
+    def test_writes_session_event_with_required_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                self.assertEqual(m.cmd_log_session(_ns(kind="dev", sprint="v2"), repo), 0)
+            events = m.load_events(repo)
+            self.assertEqual(len(events), 1)
+            e = events[0]
+            self.assertEqual(e["event_type"], "session")
+            self.assertEqual(e["kind"], "dev")
+            self.assertEqual(e["sprint"], "v2")
+            self.assertIn("ts", e)
+            self.assertNotIn("task", e)
+            self.assertNotIn("rework", e)
+
+    def test_task_field_only_when_provided(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_session(_ns(kind="dev", sprint="v2", task="T007"), repo)
+                m.cmd_log_session(_ns(kind="tests", sprint="v2"), repo)
+            events = m.load_events(repo)
+            self.assertEqual(events[0]["task"], "T007")
+            self.assertNotIn("task", events[1])
+
+    def test_rework_flag_persists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_session(_ns(kind="dev", sprint="v3", rework=True), repo)
+            e = m.load_events(repo)[0]
+            self.assertTrue(e["rework"])
+
+    def test_sprint_auto_detected_when_not_passed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "sprints" / "v5").mkdir(parents=True)
+            with _silence_stdout():
+                m.cmd_log_session(_ns(kind="review"), repo)
+            self.assertEqual(m.load_events(repo)[0]["sprint"], "v5")
+
+
+class CountSessionsTests(unittest.TestCase):
+    def test_zero_when_no_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(m.count_sessions(Path(tmp), sprint="v1"), 0)
+
+    def test_counts_only_session_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_gate(_ns(gate="reconcile", result="pass", sprint="v1"), repo)
+                m.cmd_log_session(_ns(kind="dev", sprint="v1"), repo)
+                m.cmd_log_session(_ns(kind="tests", sprint="v1"), repo)
+                m.cmd_log_session(_ns(kind="dev", sprint="v2"), repo)
+            self.assertEqual(m.count_sessions(repo, sprint="v1"), 2)
+            self.assertEqual(m.count_sessions(repo, sprint="v2"), 1)
+            self.assertEqual(m.count_sessions(repo, sprint=None), 3)
+
+    def test_cli_emits_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_session(_ns(kind="dev", sprint="v4"), repo)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                m.cmd_count_sessions(_ns(sprint="v4", json=True), repo)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(payload, {"sprint": "v4", "session_count": 1})
+
+
+class ListEventsEventTypeFilterTests(unittest.TestCase):
+    def test_filter_by_event_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            with _silence_stdout():
+                m.cmd_log_gate(_ns(gate="reconcile", result="pass", sprint="v1"), repo)
+                m.cmd_log_session(_ns(kind="dev", sprint="v1"), repo)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                m.cmd_list_events(_ns(event_type="session", json=True), repo)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["event_type"], "session")
 
 
 class LoadEventsTests(unittest.TestCase):

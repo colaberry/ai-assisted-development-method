@@ -102,6 +102,31 @@ SIGNOFF_GOOD = textwrap.dedent("""\
 SIGNOFF_BAD = "no fields here\n"
 
 
+def _install_metrics(repo_root: Path) -> None:
+    """Drop metrics/scripts/metrics.py into repo_root so find_metrics_script hits."""
+    here = Path(__file__).resolve().parent
+    src = here.parent.parent / "metrics" / "scripts" / "metrics.py"
+    dest = repo_root / "metrics" / "scripts"
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copy(src, dest / "metrics.py")
+
+
+def _seed_session_event(repo_root: Path, sprint_name: str, n: int = 1) -> None:
+    """Write `n` session events for `sprint_name` to docs/metrics/events.jsonl."""
+    events_dir = repo_root / "docs" / "metrics"
+    events_dir.mkdir(parents=True, exist_ok=True)
+    with (events_dir / "events.jsonl").open("a", encoding="utf-8") as fp:
+        for _ in range(n):
+            fp.write(
+                json.dumps({
+                    "ts": "2026-04-19T00:00:00+00:00",
+                    "event_type": "session",
+                    "sprint": sprint_name,
+                    "kind": "dev",
+                }) + "\n"
+            )
+
+
 def _build_sprint(
     tmp: Path,
     *,
@@ -317,6 +342,61 @@ class RunCloseTests(unittest.TestCase):
             self.assertFalse(report.locked)
             failing = {c.name for c in report.checks if not c.passed}
             self.assertIn("reconcile", failing)
+
+    def test_metrics_not_installed_does_not_block(self):
+        # Existing installs without the metrics module must keep working —
+        # minimum-viable adoption is CLAUDE.md + stable IDs + reconcile.py.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(report.locked, msg=[c for c in report.checks if not c.passed])
+            sessions = next(c for c in report.checks if c.name == "sessions_logged")
+            self.assertTrue(sessions.passed)
+            self.assertIn("metrics/ not installed", sessions.detail)
+
+    def test_metrics_installed_zero_sessions_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            _install_metrics(repo)
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            self.assertFalse((sprint / ".lock").exists())
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("sessions_logged", failing)
+            sessions = next(c for c in report.checks if c.name == "sessions_logged")
+            self.assertIn("no session events logged for v3", sessions.detail)
+
+    def test_metrics_installed_with_session_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            _install_metrics(repo)
+            _seed_session_event(repo, "v3", n=2)
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(report.locked, msg=[c for c in report.checks if not c.passed])
+            sessions = next(c for c in report.checks if c.name == "sessions_logged")
+            self.assertIn("2 session event(s) logged for v3", sessions.detail)
+
+    def test_session_events_for_other_sprint_do_not_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            _install_metrics(repo)
+            _seed_session_event(repo, "v2", n=5)  # wrong sprint
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            sessions = next(c for c in report.checks if c.name == "sessions_logged")
+            self.assertFalse(sessions.passed)
 
     def test_already_locked_short_circuits(self):
         with tempfile.TemporaryDirectory() as tmp:
