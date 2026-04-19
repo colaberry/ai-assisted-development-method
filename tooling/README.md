@@ -72,7 +72,7 @@ python3 scripts/reconcile.py sprints/v1
 ## How `/reconcile` works
 
 - **Input:** a sprint directory (`sprints/vN/`) containing `PRD.md` and `TASKS.md`.
-- **What it does:** extracts requirement IDs from the PRD, extracts `Satisfies:` citations from TASKS, and for each requirement determines whether a completed task satisfies it AND the claimed files exist in the repo. Deferred requirements must have a `[DEFERRED]` entry with `Target:` and `Reason:`.
+- **What it does:** extracts requirement IDs from the PRD, extracts `Satisfies:` citations from TASKS, and for each requirement determines whether a completed task satisfies it, the claimed files exist in the repo, AND symbols extracted from the task's title and `Acceptance:` line actually appear in those files. Deferred requirements must have a `[DEFERRED]` entry with `Target:` and `Reason:`.
 - **Output:** a human-readable coverage table (default) or JSON (`--json`).
 - **Exit code:** 0 if all requirements are covered or explicitly deferred; 1 if any are missing.
 - **CI mode:** `--ci` suppresses the verbose table and emits a clear FAIL message on gaps.
@@ -84,6 +84,7 @@ Most are tunable by editing the regex patterns near the top of `reconcile.py`.
 - **Requirement IDs match:** `§X.Y`, `§X.Y.Z`, `Dn`, `Qn`, `SOW-§X.Y`. Add patterns if your team uses different conventions.
 - **Task format:** markdown list items in the shape `- [x] T001: title` with two-space-indented sublines like `  - Satisfies: §4.2, D5`. Both `- ` prefixes and plain indented sublines are accepted.
 - **File presence means existence**, not correctness. `/reconcile` answers "did we build it?" Tests in CI answer "does it work?" This separation is deliberate.
+- **Symbol presence is a heuristic.** Backticked tokens in the task title and `Acceptance:` are the strongest signal; bare `snake_case`/`camelCase`/`ALL_CAPS` identifiers are also picked up. Plain English words are filtered out. A "covered" task whose listed files exist but contain none of the extracted symbols gets a `STUB-WARNING:` and is demoted to MEDIUM confidence. Pass `--strict-symbols` to upgrade that pattern to a hard failure.
 - **Active sprint detection (CI):** the highest-numbered `sprints/vN/` directory without a `.lock` file is considered active.
 
 ### Running it
@@ -97,6 +98,9 @@ python3 scripts/reconcile.py sprints/v1 --json
 
 # CI mode (terse, non-zero exit on gaps)
 python3 scripts/reconcile.py sprints/v1 --ci
+
+# CI mode with the strict symbol-presence check (fails on empty stubs)
+python3 scripts/reconcile.py sprints/v1 --ci --strict-symbols
 
 # Custom repo root (default: cwd)
 python3 scripts/reconcile.py sprints/v1 --repo-root /path/to/repo
@@ -121,7 +125,6 @@ Intentionally out of scope for day-one tooling:
 
 These are genuine gaps to watch for when you start using this:
 
-- **"How strict is the `Files:` check?"** Currently it verifies file presence only. A more sophisticated check would grep the file for a symbol the task promises. Consider upgrading once your team has a convention for what should be greppable.
 - **"What happens if a requirement applies across two sprints?"** Currently, it is covered in one sprint and absent from the other. If your team needs cross-sprint requirement tracking, extend the script to look across sprints — but be cautious; simpler is better here.
 - **"How does this interact with branch-based workflows?"** The CI workflow assumes PRs target main and that sprint state is tracked on main. If your team uses long-lived feature branches per sprint, the active-sprint detection needs adjustment.
 

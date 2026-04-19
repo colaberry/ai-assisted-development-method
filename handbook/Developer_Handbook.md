@@ -43,6 +43,8 @@ The `Satisfies:` line on a task is how requirement traceability works end to end
 - If a task claims to satisfy an ID but doesn't actually produce code that addresses it, that's a `/reconcile` failure waiting to happen. Split the task.
 - If you find yourself wanting to cite a requirement that doesn't have an ID yet, stop and assign one. Don't invent `Satisfies:` against ungraspable prose.
 
+**Symbol-presence check.** `/reconcile` doesn't only confirm that the paths under `Files:` exist — it also extracts candidate symbols from your task's title and `Acceptance:` line and greps the listed files for them. Backticked tokens (e.g. `` `_routes_differ` ``) are the strongest signal; bare `snake_case`, `camelCase`, `PascalCase`, and `ALL_CAPS` identifiers are picked up too. If the file exists but contains none of those symbols, you get a `STUB-WARNING:` and the entry is demoted to MEDIUM confidence — the "empty stub passes reconcile" pattern. Two implications: (1) write task titles and `Acceptance:` lines that name the actual symbol you're going to add or modify (`Wire \`_routes_differ\` into the load_ref path`, not `Improve threading`); (2) `/reconcile --strict-symbols` is the strict mode that fails CI on stubs — opt in for a sprint after you've sanity-checked your team's symbol naming.
+
 ### 1.2 Designing the test matrix (Step 2.5)
 
 Before writing any test code, you write down the plan. Five categories. You do this every task. It takes 10–20 minutes. It is the step that teams skip and the step that catches the bugs they then ship.
