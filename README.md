@@ -31,7 +31,8 @@ The method operates at two levels:
 ├── handbook/                 # Practical guide for engineers
 ├── internal-mode/            # Companion mode for internal product work
 ├── state-check/              # Repo-state detection CLI + Claude Code skill
-└── tooling/                  # reconcile.py, CI workflow, templates
+├── metrics/                  # Gate-event logger (Phase 1) — calibration data for retros
+└── tooling/                  # reconcile.py, CI workflows, templates
 ```
 
 ## Quick start
@@ -49,6 +50,7 @@ Read [START-HERE.md](START-HERE.md) first. It covers the reading order (60–90 
 - **[reconcile.py](tooling/scripts/reconcile.py)** — sprint coverage check. Python stdlib only. Runs in CI via [reconcile.yml](tooling/.github/workflows/reconcile.yml) as a merge gate.
 - **[security.yml](tooling/.github/workflows/security.yml)** — Semgrep-based security merge gate. Blocks PRs on any ERROR-severity finding. Deliberate suppressions live in [docs/security/suppressions.md](tooling/templates/security-suppressions-TEMPLATE.md) with a 90-day re-review ceremony enforced by `state-check.py`.
 - **[state-check.py](state-check/scripts/state-check.py)** — detects current repo state (mode, stage, active sprint, flags). Heads-up display, not autopilot. Ships with a [Claude Code skill](state-check/.claude/skills/state-check.md) for conversational use.
+- **[metrics.py](metrics/scripts/metrics.py)** — Phase 1 gate-event logger. CI workflows call `log-gate` on every gate run; pass/fail records accumulate as JSONL for retro calibration. Session/rework logging is deferred to [Phase 2 (#13)](https://github.com/colaberry/ai-assisted-development-method/issues/13) until one engagement has produced calibration data. See [metrics/docs/METRICS.md](metrics/docs/METRICS.md).
 - **Templates** — [CLAUDE.md](tooling/templates/CLAUDE.md), [client intake](tooling/templates/client-intake-TEMPLATE.md), [sprint PRD](tooling/templates/sprint-PRD-TEMPLATE.md), [tasks](tooling/templates/sprint-TASKS-TEMPLATE.md), [failures log](tooling/templates/failures-log-TEMPLATE.md), [retro](tooling/templates/retro-TEMPLATE.md), [security suppressions](tooling/templates/security-suppressions-TEMPLATE.md).
 
 ## What this deliberately does NOT include yet

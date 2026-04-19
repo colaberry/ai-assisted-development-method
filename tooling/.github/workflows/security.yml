@@ -49,6 +49,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Semgrep
+        id: semgrep
         run: |
           semgrep scan \
             --config=auto \
@@ -68,3 +69,22 @@ jobs:
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
+      # Phase 1 metrics — record that the gate ran. `if: always()` is critical:
+      # without it the step is skipped on failure, which is exactly the case
+      # you most want to capture. PR-branch events are visible in the Actions
+      # run log but lost on squash merge; durable commit-back lands in
+      # Phase 2 (#13). Requires scripts/metrics.py installed from the AADM
+      # metrics module.
+      - name: Log gate event
+        if: always()
+        run: |
+          if [ -f scripts/metrics.py ]; then
+            if [ "${{ steps.semgrep.outcome }}" = "success" ]; then
+              python3 scripts/metrics.py log-gate --gate security --result pass
+            else
+              python3 scripts/metrics.py log-gate --gate security --result fail
+            fi
+          else
+            echo "scripts/metrics.py not installed; skipping gate event log." >&2
+          fi

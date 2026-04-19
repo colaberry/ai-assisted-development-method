@@ -52,6 +52,7 @@ jobs:
           fi
 
       - name: Run reconcile
+        id: reconcile
         if: steps.find-sprint.outputs.skip == 'false'
         run: |
           python3 scripts/reconcile.py "${{ steps.find-sprint.outputs.sprint_dir }}" --ci
@@ -61,3 +62,21 @@ jobs:
         run: |
           # Non-blocking human-readable summary, included in the PR check output.
           python3 scripts/reconcile.py "${{ steps.find-sprint.outputs.sprint_dir }}" || true
+
+      # Phase 1 metrics — record that the gate ran. `if: always()` is critical:
+      # without it the step is skipped on failure, which is the case you most
+      # want to capture. PR-branch events are visible in the Actions run log
+      # but lost on squash merge; durable commit-back lands in Phase 2 (#13).
+      # Requires scripts/metrics.py installed from the AADM metrics module.
+      - name: Log gate event
+        if: steps.find-sprint.outputs.skip == 'false' && always()
+        run: |
+          if [ -f scripts/metrics.py ]; then
+            if [ "${{ steps.reconcile.outcome }}" = "success" ]; then
+              python3 scripts/metrics.py log-gate --gate reconcile --result pass
+            else
+              python3 scripts/metrics.py log-gate --gate reconcile --result fail
+            fi
+          else
+            echo "scripts/metrics.py not installed; skipping gate event log." >&2
+          fi
