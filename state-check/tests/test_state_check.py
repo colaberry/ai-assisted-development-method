@@ -378,5 +378,110 @@ class CheckOpenIncidentsTests(unittest.TestCase):
             self.assertIn("2026-04-15-fresh.md", flag.message)
 
 
+class GapAnalysisStalenessTests(unittest.TestCase):
+    """check_gap_analysis_staleness: P1 when analysis is missing or stale."""
+
+    def _make_initiative(self, repo: Path, stem: str) -> Path:
+        docs = repo / "docs"
+        docs.mkdir(parents=True, exist_ok=True)
+        doc = docs / f"{stem}.md"
+        doc.write_text(f"# {stem}\n\n## §1.1 Requirement\n", encoding="utf-8")
+        return doc
+
+    def _make_analysis(self, repo: Path, stem: str, mtime: float | None = None) -> Path:
+        docs = repo / "docs"
+        docs.mkdir(parents=True, exist_ok=True)
+        analysis = docs / f"{stem}_GAP_ANALYSIS.md"
+        analysis.write_text("# Gap\n\n## Orphaned\n\nNone identified.\n", encoding="utf-8")
+        if mtime is not None:
+            import os
+            os.utime(analysis, (mtime, mtime))
+        return analysis
+
+    def _make_lock(self, repo: Path, sprint_name: str, mtime: float | None = None) -> Path:
+        sprint = repo / "sprints" / sprint_name
+        sprint.mkdir(parents=True, exist_ok=True)
+        lock = sprint / ".lock"
+        lock.write_text("locked\n", encoding="utf-8")
+        if mtime is not None:
+            import os
+            os.utime(lock, (mtime, mtime))
+        return lock
+
+    def test_no_docs_no_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(sc.check_gap_analysis_staleness(Path(tmp)))
+
+    def test_docs_exist_but_no_analysis_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._make_initiative(repo, "alpha")
+            flag = sc.check_gap_analysis_staleness(repo)
+            self.assertIsNotNone(flag)
+            self.assertEqual(flag.severity, "P1")
+            self.assertEqual(flag.category, "traceability")
+            self.assertIn("alpha", flag.message)
+            self.assertIn("missing", flag.message)
+
+    def test_analysis_present_no_locks_no_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._make_initiative(repo, "alpha")
+            self._make_analysis(repo, "alpha")
+            self.assertIsNone(sc.check_gap_analysis_staleness(repo))
+
+    def test_analysis_newer_than_lock_no_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._make_initiative(repo, "alpha")
+            self._make_lock(repo, "v1", mtime=1_000_000.0)
+            self._make_analysis(repo, "alpha", mtime=2_000_000.0)
+            self.assertIsNone(sc.check_gap_analysis_staleness(repo))
+
+    def test_analysis_older_than_lock_flagged_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._make_initiative(repo, "alpha")
+            self._make_analysis(repo, "alpha", mtime=1_000_000.0)
+            self._make_lock(repo, "v2", mtime=2_000_000.0)
+            flag = sc.check_gap_analysis_staleness(repo)
+            self.assertIsNotNone(flag)
+            self.assertEqual(flag.severity, "P1")
+            self.assertIn("older than", flag.message)
+            self.assertIn("alpha", flag.message)
+
+    def test_gap_analysis_file_not_treated_as_initiative(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            # Only the analysis exists — _initiative_docs must skip it so
+            # we don't chase docs/<stem>_GAP_ANALYSIS_GAP_ANALYSIS.md.
+            (repo / "docs").mkdir()
+            (repo / "docs" / "alpha_GAP_ANALYSIS.md").write_text("x", encoding="utf-8")
+            self.assertIsNone(sc.check_gap_analysis_staleness(repo))
+
+    def test_hypothesis_and_readme_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            docs = repo / "docs"
+            docs.mkdir()
+            (docs / "hypothesis.md").write_text("h", encoding="utf-8")
+            (docs / "README.md").write_text("r", encoding="utf-8")
+            self.assertIsNone(sc.check_gap_analysis_staleness(repo))
+
+    def test_mixed_missing_and_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._make_initiative(repo, "alpha")  # no analysis → missing
+            self._make_initiative(repo, "beta")
+            self._make_analysis(repo, "beta", mtime=1_000_000.0)  # stale
+            self._make_lock(repo, "v1", mtime=2_000_000.0)
+            flag = sc.check_gap_analysis_staleness(repo)
+            self.assertIsNotNone(flag)
+            self.assertIn("alpha", flag.message)
+            self.assertIn("beta", flag.message)
+            self.assertIn("missing", flag.message)
+            self.assertIn("older than", flag.message)
+
+
 if __name__ == "__main__":
     unittest.main()

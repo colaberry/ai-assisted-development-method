@@ -18,6 +18,10 @@ What this script will refuse to lock:
     has no `SECURITY-REVIEW.md` artifact (same for `/ui-qa` and UI-QA.md).
     The artifact must contain `Reviewer:`, `Date:`, and `Decision:` fields;
     `Decision: blocked` is a refusal.
+  - A sprint closed while any `docs/*_GAP_ANALYSIS.md` still reports
+    orphaned initiative requirements. Absence of gap analyses is a pass
+    (warn-only) so teams that haven't adopted `/gap` aren't retroactively
+    blocked; presence plus unresolved orphans is a refusal.
   - A sprint without a sign-off (either `sprints/vN/SIGNOFF.md` containing
     `Reviewer:` + `Date:` lines, or `--reviewer NAME` passed on the CLI to
     create one).
@@ -513,6 +517,87 @@ def check_signoff(
 
 
 # ---------------------------------------------------------------------------
+# Initiative-boundary check (depends on gap.py having been run)
+# ---------------------------------------------------------------------------
+
+
+_GAP_ORPHAN_ENTRY_RE = re.compile(r"^\s*-\s+\*\*([^*]+)\*\*", re.MULTILINE)
+
+
+def _parse_gap_orphans(analysis_path: Path) -> list[str]:
+    """Return the list of orphaned requirement IDs named under the
+    `## Orphaned` section of a `docs/<INITIATIVE>_GAP_ANALYSIS.md` file.
+
+    The clean-report signal is the literal "None identified" line that
+    `gap.py render_markdown` emits when the section is empty. If that
+    line is present, we return an empty list regardless of bullets
+    elsewhere in the file.
+    """
+    try:
+        text = analysis_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    # Find "## Orphaned" and slice to the next "## " heading.
+    start = text.find("## Orphaned")
+    if start < 0:
+        return []
+    tail = text[start:]
+    next_heading = re.search(r"\n## ", tail[len("## Orphaned"):])
+    section = tail if not next_heading else tail[: len("## Orphaned") + next_heading.start()]
+
+    if "None identified" in section:
+        return []
+    return [match.group(1).strip() for match in _GAP_ORPHAN_ENTRY_RE.finditer(section)]
+
+
+def check_gap_orphans(repo_root: Path) -> CheckResult:
+    """Refuse to lock when any `docs/*_GAP_ANALYSIS.md` reports orphans.
+
+    Absence of gap analyses is a pass (warn-only): teams that haven't
+    adopted `/gap` yet aren't retroactively blocked. `state-check.py`
+    surfaces "analysis missing" or "stale" as a P1 flag so the absence
+    is visible without being gate-level.
+    """
+    docs_dir = repo_root / "docs"
+    if not docs_dir.is_dir():
+        return CheckResult(
+            "gap_orphans",
+            True,
+            "no docs/ directory; gap check skipped",
+        )
+    analyses = sorted(docs_dir.glob("*_GAP_ANALYSIS.md"))
+    if not analyses:
+        return CheckResult(
+            "gap_orphans",
+            True,
+            "no *_GAP_ANALYSIS.md files present; run /gap to enable this gate",
+        )
+    offenders: list[str] = []
+    for analysis in analyses:
+        orphans = _parse_gap_orphans(analysis)
+        if orphans:
+            offenders.append(
+                f"{analysis.name}: {', '.join(orphans)}"
+            )
+    if offenders:
+        return CheckResult(
+            "gap_orphans",
+            False,
+            (
+                "gap analyses report orphaned initiative requirements — "
+                "resolve via /prd (new task) or [DEFERRED] entry before "
+                "closing: " + "; ".join(offenders)
+            ),
+        )
+    return CheckResult(
+        "gap_orphans",
+        True,
+        f"{len(analyses)} gap analysis file(s) report no orphans",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -555,6 +640,7 @@ def run_close(
         artifact_filename="UI-QA.md",
         check_name="ui_qa",
     ))
+    report.checks.append(check_gap_orphans(repo_root))
 
     signoff_result, reviewer = check_signoff(sprint_dir, reviewer_arg)
     report.checks.append(signoff_result)

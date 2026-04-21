@@ -597,6 +597,100 @@ def check_open_incidents(repo: Path) -> Optional[Flag]:
     )
 
 
+def _initiative_docs(repo: Path) -> list[Path]:
+    """Return candidate initiative design docs under `docs/`.
+
+    An initiative doc is any `docs/*.md` file that isn't hypothesis.md,
+    isn't a gap-analysis output, and isn't one of the known
+    non-initiative docs (SOW, intake README, etc.) that sometimes live
+    at the top level of `docs/`.
+    """
+    docs_dir = repo / "docs"
+    if not docs_dir.is_dir():
+        return []
+    excluded_stems = {"hypothesis", "README", "CHANGELOG"}
+    out: list[Path] = []
+    for p in docs_dir.iterdir():
+        if not p.is_file() or p.suffix != ".md":
+            continue
+        if p.stem in excluded_stems:
+            continue
+        if p.stem.endswith("_GAP_ANALYSIS"):
+            continue
+        out.append(p)
+    return out
+
+
+def _latest_sprint_lock_mtime(repo: Path) -> Optional[float]:
+    """Return the newest `.lock` mtime across `sprints/v*/`, or None."""
+    sprints_dir = repo / "sprints"
+    if not sprints_dir.is_dir():
+        return None
+    newest: Optional[float] = None
+    for sprint in sprints_dir.iterdir():
+        if not sprint.is_dir() or not re.match(r"v\d+", sprint.name):
+            continue
+        lock = sprint / ".lock"
+        if not lock.is_file():
+            continue
+        mtime = lock.stat().st_mtime
+        if newest is None or mtime > newest:
+            newest = mtime
+    return newest
+
+
+def check_gap_analysis_staleness(repo: Path) -> Optional[Flag]:
+    """Flag initiatives whose gap analysis is missing or stale.
+
+    An initiative at `docs/<NAME>.md` is expected to carry a
+    `docs/<NAME>_GAP_ANALYSIS.md` produced by `/gap`. This check emits a
+    P1 flag when:
+
+    - An initiative doc has no corresponding analysis file, OR
+    - The analysis file's mtime is older than the newest sprint `.lock`
+      (i.e., a sprint has closed since the analysis was last run).
+
+    Silent-drop is the failure mode this check guards against: the
+    analysis is the artifact `/sprint-close` reads to refuse a lock
+    with orphaned requirements, so a stale analysis lets a close pass
+    against out-of-date evidence.
+    """
+    candidates = _initiative_docs(repo)
+    if not candidates:
+        return None
+    latest_lock_mtime = _latest_sprint_lock_mtime(repo)
+    missing: list[str] = []
+    stale: list[str] = []
+    for doc in candidates:
+        analysis = doc.with_name(f"{doc.stem}_GAP_ANALYSIS.md")
+        if not analysis.is_file():
+            missing.append(doc.stem)
+            continue
+        if latest_lock_mtime is not None and analysis.stat().st_mtime < latest_lock_mtime:
+            stale.append(doc.stem)
+    if not missing and not stale:
+        return None
+    parts: list[str] = []
+    if missing:
+        missing.sort()
+        preview = ", ".join(missing[:3])
+        if len(missing) > 3:
+            preview += f" (+{len(missing) - 3} more)"
+        parts.append(f"missing gap analysis for {preview}")
+    if stale:
+        stale.sort()
+        preview = ", ".join(stale[:3])
+        if len(stale) > 3:
+            preview += f" (+{len(stale) - 3} more)"
+        parts.append(f"gap analysis older than latest sprint lock for {preview}")
+    return Flag(
+        severity="P1",
+        category="traceability",
+        message="; ".join(parts) + ".",
+        suggested_action="Run /gap on each initiative to refresh docs/<INITIATIVE>_GAP_ANALYSIS.md before the next /sprint-close.",
+    )
+
+
 def check_test_modifications(repo: Path) -> Optional[Flag]:
     modified = git_recent_test_modifications(repo)
     if modified:
@@ -753,6 +847,7 @@ def run_state_check(repo: Path) -> ModeState:
         check_claude_md_placeholders,
         check_failures_log_size,
         check_open_incidents,
+        check_gap_analysis_staleness,
         check_test_modifications,
         check_security_suppressions_staleness,
     ):

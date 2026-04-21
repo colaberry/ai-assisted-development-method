@@ -849,5 +849,143 @@ class CLITests(unittest.TestCase):
             self.assertEqual(payload["reviewer"], "Jane Doe")
 
 
+GAP_ANALYSIS_CLEAN = """\
+# Gap analysis — AUTH
+
+**Initiative requirements:** 3  | covered: 3 | deferred: 0 | orphaned: 0 | conflicted: 0
+
+## Covered
+
+- **§1.1** — v3/T001 (complete)
+
+## Deferred (with target)
+
+- None.
+
+## Orphaned
+
+- None identified. Every initiative requirement has either an active task or a `[DEFERRED]` entry with a target.
+
+## Conflicted
+
+- None.
+"""
+
+
+GAP_ANALYSIS_WITH_ORPHANS = """\
+# Gap analysis — AUTH
+
+**Initiative requirements:** 3  | covered: 1 | deferred: 0 | orphaned: 2 | conflicted: 0
+
+## Covered
+
+- **§1.1** — v3/T001 (complete)
+
+## Orphaned
+
+> Each entry below is a requirement in the design document that no sprint has picked up.
+
+- **§1.2**
+- **§1.3**
+
+## Conflicted
+
+- None.
+"""
+
+
+class GapOrphansCheckTests(unittest.TestCase):
+    def _write_analysis(self, repo: Path, name: str, body: str) -> Path:
+        (repo / "docs").mkdir(exist_ok=True)
+        analysis = repo / "docs" / name
+        analysis.write_text(body, encoding="utf-8")
+        return analysis
+
+    def test_no_docs_dir_is_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = sc.check_gap_orphans(Path(tmp))
+            self.assertTrue(result.passed)
+            self.assertIn("no docs/", result.detail)
+
+    def test_no_analyses_is_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "docs").mkdir()
+            result = sc.check_gap_orphans(Path(tmp))
+            self.assertTrue(result.passed)
+            self.assertIn("no *_GAP_ANALYSIS.md", result.detail)
+
+    def test_clean_analysis_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_analysis(repo, "AUTH_GAP_ANALYSIS.md", GAP_ANALYSIS_CLEAN)
+            result = sc.check_gap_orphans(repo)
+            self.assertTrue(result.passed, result.detail)
+
+    def test_orphan_analysis_fails_and_names_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_analysis(
+                repo, "AUTH_GAP_ANALYSIS.md", GAP_ANALYSIS_WITH_ORPHANS
+            )
+            result = sc.check_gap_orphans(repo)
+            self.assertFalse(result.passed)
+            self.assertIn("§1.2", result.detail)
+            self.assertIn("§1.3", result.detail)
+            self.assertIn("AUTH_GAP_ANALYSIS.md", result.detail)
+
+    def test_multiple_analyses_any_orphan_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self._write_analysis(repo, "AUTH_GAP_ANALYSIS.md", GAP_ANALYSIS_CLEAN)
+            self._write_analysis(
+                repo, "BILLING_GAP_ANALYSIS.md", GAP_ANALYSIS_WITH_ORPHANS
+            )
+            result = sc.check_gap_orphans(repo)
+            self.assertFalse(result.passed)
+            self.assertIn("BILLING_GAP_ANALYSIS.md", result.detail)
+
+
+class RunCloseGapIntegrationTests(unittest.TestCase):
+    def test_gap_orphan_blocks_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            (repo / "docs").mkdir()
+            (repo / "docs" / "AUTH_GAP_ANALYSIS.md").write_text(
+                GAP_ANALYSIS_WITH_ORPHANS, encoding="utf-8"
+            )
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("gap_orphans", failing)
+            self.assertFalse((sprint / ".lock").exists())
+
+    def test_clean_gap_analysis_allows_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            (repo / "docs").mkdir()
+            (repo / "docs" / "AUTH_GAP_ANALYSIS.md").write_text(
+                GAP_ANALYSIS_CLEAN, encoding="utf-8"
+            )
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(report.locked, msg=[c for c in report.checks if not c.passed])
+
+    def test_missing_gap_analysis_does_not_block(self):
+        # Absent analyses must not block lock (warn-only; state-check surfaces
+        # the absence as P1).
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp))
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(report.locked, msg=[c for c in report.checks if not c.passed])
+
+
 if __name__ == "__main__":
     unittest.main()
