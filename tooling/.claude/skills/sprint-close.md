@@ -2,7 +2,7 @@
 
 This skill runs the end-of-sprint ceremony and invokes `sprint_close.py` to write `sprints/vN/.lock` when every check passes. The `.lock` file is the structural signal that downstream tooling (`sprint_gate.py` PreToolUse hook, `state-check.py`, `/prd` preconditions) uses to decide whether work on sprint vN+1 is allowed. No `.lock`, no next sprint — that's the rule the script enforces.
 
-`sprint_close.py` is the authority; this skill is the conversational wrapper that collects the artifacts the script needs, handles the retro and walkthrough, and orchestrates the security/UI-QA escalation when the PRD said they were required.
+`sprint_close.py` is the authority; this skill is the conversational wrapper that collects the artifacts the script needs, handles the retro and walkthrough, and reminds the engineer to run the manual `/security-review` and `/ui-qa` checklists when the PRD said they were required. Those two are checklist steps the engineer executes — they are not automated skills today.
 
 ## When to invoke
 
@@ -38,8 +38,8 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
    - `RETRO.md` — filled in (not the template stub). The skill walks the engineer through it section by section if empty.
    - `WALKTHROUGH.md` — written or signed off. For client-facing engagements, this is the projection the client sees; for internal products, it's a short demo script.
    - Sign-off — either an existing `SIGNOFF.md` with `Reviewer:` + `Date:` lines, or a reviewer name to pass as `--reviewer` on the CLI.
-2. **Runs `/security-review` if the PRD said `Yes`** in the security-scope line. Security is now a structural CI gate (semgrep), but the manual review is the judgment layer — the gate catches mechanically-detectable issues, the review catches design-level ones.
-3. **Runs `/ui-qa` if the PRD said `Yes`.** Skipping UI QA on UI-scope sprints because "it probably works" is exactly the kind of omission that lands as an `/incident` three weeks later.
+2. **Reminds the engineer to run the manual `/security-review` checklist if the PRD said `Yes`** in the security-scope line. Security is a structural CI gate (semgrep), but the manual review is the judgment layer — the gate catches mechanically-detectable issues, the review catches design-level ones. There is no `security-review.md` skill today; the engineer is responsible for running the review and recording the outcome in the retro.
+3. **Reminds the engineer to run the manual `/ui-qa` checklist if the PRD said `Yes`.** Skipping UI QA on UI-scope sprints because "it probably works" is exactly the kind of omission that lands as an `/incident` three weeks later. There is no `ui-qa.md` skill today; the engineer runs the checklist and records the outcome in the retro.
 4. **Orchestrates the retro.** Fills `RETRO.md` by asking about: what went well, what went poorly, what surprised the team, what to carry forward, what to drop. Pushes for specifics — "communication was bad" is not a finding. The retro is a `sprint_close.py` gate: template markers (`<placeholder>`, `vN`, `YYYY-MM-DD`) in the file will cause the close to refuse.
 5. **Verifies the deferred aggregate view is in sync** with the `[DEFERRED]` tasks. If a requirement was silently dropped (no `[DEFERRED]` entry, but also no `[x]` task covering it), `reconcile.py --ci` will surface the gap and `sprint_close.py` will refuse.
 6. **Invokes `sprint_close.py`:**

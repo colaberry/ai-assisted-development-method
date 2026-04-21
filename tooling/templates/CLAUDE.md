@@ -167,7 +167,7 @@ These come from the AI-Assisted Development Method (AADM) and apply to every ses
 3. **Silent descoping is an anti-pattern.** Dropping a requirement requires an explicit `[DEFERRED]` entry naming the target sprint. Likewise, silent scope expansion in implementation phases is the inverse anti-pattern: when scope feels wrong, kick it back to a proposal phase rather than expanding silently.
 4. **Test writing and implementation are in separate sessions.**
 5. **One task at a time per `/dev` session.**
-6. **`/sprint-close` runs `/reconcile`, `/security-review` (if in scope), `/ui-qa` (if in scope), `/walkthrough`, and `/retro` before locking.**
+6. **`/sprint-close` structurally runs `reconcile.py` and refuses to lock without a real `RETRO.md` and `WALKTHROUGH.md`.** `/security-review` and `/ui-qa` are manual checklist steps the engineer runs when PRD scope flags are set — they are not automated skills today (see backlog issues #26, #28). The retro and walkthrough are in-skill steps within `/sprint-close`, not separate skills.
 7. **Client-facing artifacts are projections of internal artifacts. They never contradict `/reconcile` or `/gap` output.**
 8. **Requirement IDs are stable. Never renamed or renumbered.**
 
