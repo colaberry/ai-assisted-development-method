@@ -62,7 +62,7 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 ## Handling the common refusal modes
 
 - **RETRO.md still has template markers.** Re-run the retro walk-through. The placeholders exist because no one filled them in; the fix is filling them in, not deleting them.
-- **`reconcile.py --ci` fails with a missing requirement.** Either the requirement needs a task (re-open the sprint briefly, add the task, run `/dev`), or it needs a `[DEFERRED]` entry with `Target:` and `Reason:`. Silent drop is not an option.
+- **`reconcile.py --ci` fails with a missing requirement.** Either the requirement needs a task (re-open the sprint briefly, add the task, run `/dev-test` then `/dev-impl` in separate sessions), or it needs a `[DEFERRED]` entry with `Target:` and `Reason:`. Silent drop is not an option.
 - **Symbol-presence `STUB-WARNING:` on a `[x]` task.** The task claims to be done but the files don't contain the symbols the title/acceptance imply. Either finish the implementation or un-mark the task.
 - **`sessions_logged` fails with "no session events logged for vN".** `sprint_close.py` refuses to lock a sprint with zero logged sessions when the `metrics/` module is installed. The fix is honesty: if sessions happened and weren't logged, log them retroactively from memory; if you genuinely never logged any, that's the signal the discipline hasn't landed yet and the retro should call it out. If the repo is on the minimum-viable adoption path (no `metrics/` module), the check passes with a "not installed" note — this refusal mode only fires for teams that opted into metrics logging.
 - **`security_review` / `ui_qa` fails with "SECURITY-REVIEW.md is missing" or "UI-QA.md is missing".** The PRD's scope flag says `Yes` but no artifact is committed. Run `/security-review` or `/ui-qa`; commit the artifact; re-run `/sprint-close`.
@@ -72,7 +72,7 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 
 ## Interaction with other skills
 
-- `/dev` produces the `[x]` markers and `Completed:` dates `/sprint-close` verifies.
+- `/dev-impl` produces the `[x]` markers and `Completed:` dates `/sprint-close` verifies (after `/dev-test` has committed the failing matrix in a separate session).
 - `/sprint-close` unlocks the next `/prd`. Without the `.lock`, `/prd` for vN+1 refuses to start and `sprint_gate.py` blocks writes into vN+1.
 - `/incident` is the post-close safety net. Bugs caught in Stage 1 before sprint-close are defects; bugs caught after are incidents and run the failures-log loop.
 

@@ -50,7 +50,7 @@ For Internal Product Mode: if `stage == "exploration"` and `docs/hypothesis.md` 
 ## Interaction with other skills
 
 - `/prd` runs after `/sprint-close` on the previous sprint. Fresh sprints start with an unlocked directory; the hook and state-check expect that state.
-- `/dev` runs inside a sprint, one task at a time. `/prd` produces the work that `/dev` consumes.
+- `/dev-test` and `/dev-impl` run inside a sprint, one task at a time, in separate Claude Code sessions. `/prd` produces the work those skills consume.
 - `/sprint-close` reads the PRD and TASKS that `/prd` wrote and enforces coverage before allowing the lock.
 
 ## Deliverables at the end of `/prd`
