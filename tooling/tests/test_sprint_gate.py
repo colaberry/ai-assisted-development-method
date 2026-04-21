@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Tuple
 
 
 HOOK_PATH = Path(__file__).resolve().parents[1] / "hooks" / "sprint_gate.py"
@@ -38,6 +39,50 @@ def make_sprint(repo: Path, n: int, locked: bool) -> Path:
     if locked:
         (sprint / ".lock").write_text("locked_at: 2026-01-01T00:00:00Z\n")
     return sprint
+
+
+def write_tasks(sprint: Path, body: str) -> Path:
+    tasks = sprint / "TASKS.md"
+    tasks.write_text(body, encoding="utf-8")
+    return tasks
+
+
+TASKS_SINGLE_OPEN = """\
+# Sprint v2 — Tasks
+
+- [ ] T001: Add endpoint
+  - Satisfies: §1.2
+  - Acceptance: returns 200
+  - Files: src/api/foo.py, tests/api/test_foo.py
+  - Tests required: A, B
+"""
+
+
+TASKS_MIXED = """\
+# Sprint v2 — Tasks
+
+- [ ] T001: Open task
+  - Satisfies: §1.1
+  - Files: src/api/open.py
+- [x] T002: Completed
+  - Satisfies: §1.2
+  - Files: src/api/done.py
+  - Completed: 2026-04-20
+- [DEFERRED] T003: Deferred
+  - Status: DEFERRED
+  - Target: v3
+  - Reason: blocked on vendor
+  - Files: src/api/deferred.py
+"""
+
+
+TASKS_DIR_ENTRY = """\
+# Sprint v2 — Tasks
+
+- [ ] T001: Refactor auth module
+  - Satisfies: §2.1
+  - Files: src/auth/
+"""
 
 
 class ExtractTargetPathTests(unittest.TestCase):
@@ -223,6 +268,231 @@ class EvaluateTests(unittest.TestCase):
             )
             self.assertFalse(allow)
             self.assertIn("sprints/v1/.lock", msg)
+
+
+class ActiveSprintTests(unittest.TestCase):
+    def test_returns_highest_unlocked_sprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=True)
+            s2 = make_sprint(repo, 2, locked=False)
+            sprints = sprint_gate.list_sprint_dirs(repo)
+            active = sprint_gate.active_sprint(sprints)
+            self.assertIsNotNone(active)
+            self.assertEqual(active[0], 2)
+            self.assertEqual(active[1], s2)
+
+    def test_returns_none_when_all_locked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=True)
+            make_sprint(repo, 2, locked=True)
+            sprints = sprint_gate.list_sprint_dirs(repo)
+            self.assertIsNone(sprint_gate.active_sprint(sprints))
+
+    def test_returns_none_when_no_sprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            self.assertIsNone(sprint_gate.active_sprint([]))
+
+
+class ParseFilesAllowlistTests(unittest.TestCase):
+    def test_returns_files_from_open_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            sprint = make_sprint(repo, 2, locked=False)
+            tasks = write_tasks(sprint, TASKS_SINGLE_OPEN)
+            allow = sprint_gate.parse_files_allowlist(tasks)
+            self.assertEqual(
+                allow, ["src/api/foo.py", "tests/api/test_foo.py"]
+            )
+
+    def test_skips_completed_and_deferred_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            sprint = make_sprint(repo, 2, locked=False)
+            tasks = write_tasks(sprint, TASKS_MIXED)
+            allow = sprint_gate.parse_files_allowlist(tasks)
+            self.assertEqual(allow, ["src/api/open.py"])
+
+    def test_returns_none_when_tasks_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            sprint = make_sprint(repo, 2, locked=False)
+            self.assertIsNone(
+                sprint_gate.parse_files_allowlist(sprint / "TASKS.md")
+            )
+
+    def test_returns_empty_when_no_open_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            sprint = make_sprint(repo, 2, locked=False)
+            tasks = write_tasks(
+                sprint,
+                "# Sprint v2\n\n- [x] T001: Done\n  - Files: src/done.py\n",
+            )
+            self.assertEqual(sprint_gate.parse_files_allowlist(tasks), [])
+
+
+class TargetInAllowlistTests(unittest.TestCase):
+    def test_exact_match(self):
+        self.assertTrue(
+            sprint_gate.target_in_allowlist("src/api/foo.py", ["src/api/foo.py"])
+        )
+
+    def test_miss(self):
+        self.assertFalse(
+            sprint_gate.target_in_allowlist("src/api/bar.py", ["src/api/foo.py"])
+        )
+
+    def test_directory_entry_matches_descendant(self):
+        self.assertTrue(
+            sprint_gate.target_in_allowlist("src/auth/session.py", ["src/auth/"])
+        )
+
+    def test_directory_entry_does_not_match_sibling(self):
+        self.assertFalse(
+            sprint_gate.target_in_allowlist("src/api/foo.py", ["src/auth/"])
+        )
+
+    def test_leading_dot_slash_tolerated(self):
+        self.assertTrue(
+            sprint_gate.target_in_allowlist("src/api/foo.py", ["./src/api/foo.py"])
+        )
+
+
+class EvaluateScopeAllowlistTests(unittest.TestCase):
+    def _setup_skip_condition(self, tmp: Path) -> Tuple[Path, Path]:
+        """Set up v1 unlocked + v2 active (unlocked) — the trigger for scope checks."""
+        repo = make_repo(tmp)
+        make_sprint(repo, 1, locked=False)
+        sprint2 = make_sprint(repo, 2, locked=False)
+        write_tasks(sprint2, TASKS_SINGLE_OPEN)
+        (repo / "src" / "api").mkdir(parents=True)
+        (repo / "tests" / "api").mkdir(parents=True)
+        return repo, sprint2
+
+    def test_declared_file_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._setup_skip_condition(Path(tmp))
+            allow, msg = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "api" / "foo.py")},
+                repo,
+            )
+            self.assertTrue(allow, msg)
+
+    def test_undeclared_file_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint2 = self._setup_skip_condition(Path(tmp))
+            allow, msg = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "api" / "undeclared.py")},
+                repo,
+            )
+            self.assertFalse(allow)
+            self.assertIn("src/api/undeclared.py", msg)
+            self.assertIn("v2/TASKS.md Files: allowlist", msg)
+            self.assertIn("sprints/v1/.lock", msg)
+            log = (sprint2 / ".gate-blocks.log").read_text(encoding="utf-8")
+            self.assertIn("src/api/undeclared.py", log)
+            self.assertIn("Write", log)
+
+    def test_no_enforcement_when_no_skip_condition(self):
+        # v1 locked, v2 open, no prior unlocked sprint => scope allowlist
+        # is NOT enforced. Writes to undeclared files are allowed.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=True)
+            sprint2 = make_sprint(repo, 2, locked=False)
+            write_tasks(sprint2, TASKS_SINGLE_OPEN)
+            allow, _ = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "other.py")},
+                repo,
+            )
+            self.assertTrue(allow)
+
+    def test_no_enforcement_on_v1_bootstrap(self):
+        # v1 alone, unlocked, no TASKS.md => no prior unlocked sprint so
+        # allowlist is not enforced. v1 bootstrap must not be bricked.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=False)
+            allow, _ = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "new.py")},
+                repo,
+            )
+            self.assertTrue(allow)
+
+    def test_missing_tasks_md_is_warn_only(self):
+        # v1 unlocked + v2 active, but v2 has no TASKS.md -> defensive allow.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=False)
+            make_sprint(repo, 2, locked=False)  # no TASKS.md written
+            allow, _ = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "whatever.py")},
+                repo,
+            )
+            self.assertTrue(allow)
+
+    def test_completed_task_file_is_blocked(self):
+        # Completed tasks shouldn't keep expanding scope.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=False)
+            sprint2 = make_sprint(repo, 2, locked=False)
+            write_tasks(sprint2, TASKS_MIXED)
+            allow, msg = sprint_gate.evaluate(
+                "Edit",
+                {"file_path": str(repo / "src" / "api" / "done.py")},
+                repo,
+            )
+            self.assertFalse(allow)
+            self.assertIn("src/api/done.py", msg)
+
+    def test_deferred_task_file_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=False)
+            sprint2 = make_sprint(repo, 2, locked=False)
+            write_tasks(sprint2, TASKS_MIXED)
+            allow, _ = sprint_gate.evaluate(
+                "Write",
+                {"file_path": str(repo / "src" / "api" / "deferred.py")},
+                repo,
+            )
+            self.assertFalse(allow)
+
+    def test_directory_entry_in_files_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            make_sprint(repo, 1, locked=False)
+            sprint2 = make_sprint(repo, 2, locked=False)
+            write_tasks(sprint2, TASKS_DIR_ENTRY)
+            allow, _ = sprint_gate.evaluate(
+                "Edit",
+                {"file_path": str(repo / "src" / "auth" / "session.py")},
+                repo,
+            )
+            self.assertTrue(allow)
+
+    def test_sprint_path_uses_anti_skip_not_allowlist(self):
+        # Writes under sprints/vK/ keep going through the old anti-skip path —
+        # they are not subject to the Files: allowlist.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint2 = self._setup_skip_condition(Path(tmp))
+            allow, msg = sprint_gate.evaluate(
+                "Edit",
+                {"file_path": str(sprint2 / "PRD.md")},
+                repo,
+            )
+            self.assertFalse(allow)
+            self.assertIn("sprints/v1/.lock", msg)
+            self.assertIn("Run sprint_close.py", msg)
 
 
 class MainEntryPointTests(unittest.TestCase):
