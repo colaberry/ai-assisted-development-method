@@ -164,7 +164,7 @@ These come from the AI-Assisted Development Method (AADM) and apply to every ses
 
 1. **Never start work on sprint vN+1 until sprint vN has been locked via `/sprint-close`.**
 2. **Every task has a `Satisfies:` line citing the design-doc requirement IDs it closes.**
-3. **Silent descoping is an anti-pattern.** Dropping a requirement requires an explicit `[DEFERRED]` entry naming the target sprint.
+3. **Silent descoping is an anti-pattern.** Dropping a requirement requires an explicit `[DEFERRED]` entry naming the target sprint. Likewise, silent scope expansion in implementation phases is the inverse anti-pattern: when scope feels wrong, kick it back to a proposal phase rather than expanding silently.
 4. **Test writing and implementation are in separate sessions.**
 5. **One task at a time per `/dev` session.**
 6. **`/sprint-close` runs `/reconcile`, `/security-review` (if in scope), `/ui-qa` (if in scope), `/walkthrough`, and `/retro` before locking.**
