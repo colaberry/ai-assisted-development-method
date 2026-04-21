@@ -102,6 +102,126 @@ SIGNOFF_GOOD = textwrap.dedent("""\
 SIGNOFF_BAD = "no fields here\n"
 
 
+# PRD fixtures with the scope-flag lines in several states.
+PRD_SECURITY_REQUIRED = textwrap.dedent("""\
+    # PRD v1
+    - [D1] Implement load_ref check
+
+    ## Performance and security budgets
+
+    - **`/security-review` required:** Yes
+    - **`/ui-qa` required:** No
+""")
+
+PRD_UI_REQUIRED = textwrap.dedent("""\
+    # PRD v1
+    - [D1] Implement load_ref check
+
+    ## Performance and security budgets
+
+    - **`/security-review` required:** No
+    - **`/ui-qa` required:** Yes
+""")
+
+PRD_BOTH_REQUIRED = textwrap.dedent("""\
+    # PRD v1
+    - [D1] Implement load_ref check
+
+    ## Performance and security budgets
+
+    - **`/security-review` required:** Yes
+    - **`/ui-qa` required:** Yes
+""")
+
+PRD_BOTH_NO = textwrap.dedent("""\
+    # PRD v1
+    - [D1] Implement load_ref check
+
+    ## Performance and security budgets
+
+    - **`/security-review` required:** No
+    - **`/ui-qa` required:** No
+""")
+
+# The literal template value — unfilled. Parser should treat as unspecified.
+PRD_UNFILLED_TEMPLATE = textwrap.dedent("""\
+    # PRD v1
+    - [D1] Implement load_ref check
+
+    ## Performance and security budgets
+
+    - **`/security-review` required:** Yes / No
+    - **`/ui-qa` required:** Yes / No
+""")
+
+
+# Scope-artifact fixtures.
+SECURITY_REVIEW_PASSED = textwrap.dedent("""\
+    # Security review — Sprint v3
+
+    **Sprint:** v3
+    **Scope:** auth
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+    **Decision:** passed
+
+    ## Findings
+
+    - None identified.
+""")
+
+SECURITY_REVIEW_NA = textwrap.dedent("""\
+    # Security review — Sprint v3
+
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+    **Decision:** n/a
+""")
+
+SECURITY_REVIEW_BLOCKED = textwrap.dedent("""\
+    # Security review — Sprint v3
+
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+    **Decision:** blocked
+
+    ## Findings
+
+    - Unsuppressed semgrep `hardcoded-secret` on src/integrations/stripe.py:42.
+""")
+
+SECURITY_REVIEW_MISSING_DECISION = textwrap.dedent("""\
+    # Security review — Sprint v3
+
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+""")
+
+UI_QA_PASSED = textwrap.dedent("""\
+    # UI QA — Sprint v3
+
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+    **Decision:** passed
+
+    ## Findings
+
+    - None identified.
+""")
+
+UI_QA_BLOCKED = textwrap.dedent("""\
+    # UI QA — Sprint v3
+
+    **Reviewer:** Jane Doe
+    **Date:** 2026-04-19
+    **Decision:** blocked
+
+    ## Findings
+
+    - Login button covers password field on mobile viewport.
+""")
+
+
 def _install_metrics(repo_root: Path) -> None:
     """Drop metrics/scripts/metrics.py into repo_root so find_metrics_script hits."""
     here = Path(__file__).resolve().parent
@@ -269,6 +389,166 @@ class SignoffCheckTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Scope-artifact parsing and checks
+# ---------------------------------------------------------------------------
+
+class ParsePrdScopeFlagTests(unittest.TestCase):
+    def test_yes_returns_true(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prd = Path(tmp) / "PRD.md"
+            prd.write_text(PRD_SECURITY_REQUIRED, encoding="utf-8")
+            self.assertIs(sc._parse_prd_scope_flag(prd, "security-review"), True)
+            self.assertIs(sc._parse_prd_scope_flag(prd, "ui-qa"), False)
+
+    def test_no_returns_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prd = Path(tmp) / "PRD.md"
+            prd.write_text(PRD_BOTH_NO, encoding="utf-8")
+            self.assertIs(sc._parse_prd_scope_flag(prd, "security-review"), False)
+            self.assertIs(sc._parse_prd_scope_flag(prd, "ui-qa"), False)
+
+    def test_unfilled_template_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prd = Path(tmp) / "PRD.md"
+            prd.write_text(PRD_UNFILLED_TEMPLATE, encoding="utf-8")
+            self.assertIsNone(sc._parse_prd_scope_flag(prd, "security-review"))
+            self.assertIsNone(sc._parse_prd_scope_flag(prd, "ui-qa"))
+
+    def test_missing_line_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prd = Path(tmp) / "PRD.md"
+            prd.write_text(PRD_GOOD, encoding="utf-8")
+            self.assertIsNone(sc._parse_prd_scope_flag(prd, "security-review"))
+
+    def test_missing_file_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prd = Path(tmp) / "PRD.md"
+            self.assertIsNone(sc._parse_prd_scope_flag(prd, "security-review"))
+
+
+class ParseScopeArtifactTests(unittest.TestCase):
+    def test_full_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            art = Path(tmp) / "SECURITY-REVIEW.md"
+            art.write_text(SECURITY_REVIEW_PASSED, encoding="utf-8")
+            reviewer, date, decision = sc._parse_scope_artifact(art)
+            self.assertEqual(reviewer, "Jane Doe")
+            self.assertEqual(date, "2026-04-19")
+            self.assertEqual(decision, "passed")
+
+    def test_na_normalized(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            art = Path(tmp) / "SECURITY-REVIEW.md"
+            art.write_text(SECURITY_REVIEW_NA, encoding="utf-8")
+            _, _, decision = sc._parse_scope_artifact(art)
+            self.assertEqual(decision, "n/a")
+
+    def test_missing_decision_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            art = Path(tmp) / "SECURITY-REVIEW.md"
+            art.write_text(SECURITY_REVIEW_MISSING_DECISION, encoding="utf-8")
+            reviewer, date, decision = sc._parse_scope_artifact(art)
+            self.assertEqual(reviewer, "Jane Doe")
+            self.assertEqual(date, "2026-04-19")
+            self.assertIsNone(decision)
+
+    def test_missing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            art = Path(tmp) / "SECURITY-REVIEW.md"
+            self.assertEqual(sc._parse_scope_artifact(art), (None, None, None))
+
+
+class ScopeArtifactCheckTests(unittest.TestCase):
+    def _make_sprint(self, tmp: Path, prd: str) -> Path:
+        sprint = tmp / "v3"
+        sprint.mkdir()
+        (sprint / "PRD.md").write_text(prd, encoding="utf-8")
+        return sprint
+
+    def test_flag_unspecified_passes_without_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_UNFILLED_TEMPLATE)
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertTrue(res.passed)
+            self.assertIn("unspecified", res.detail)
+
+    def test_flag_no_passes_without_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_BOTH_NO)
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertTrue(res.passed)
+
+    def test_flag_yes_without_artifact_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_SECURITY_REQUIRED)
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertFalse(res.passed)
+            self.assertIn("SECURITY-REVIEW.md is missing", res.detail)
+
+    def test_flag_yes_with_passed_artifact_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(SECURITY_REVIEW_PASSED, encoding="utf-8")
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertTrue(res.passed)
+            self.assertIn("passed", res.detail)
+
+    def test_flag_yes_with_na_artifact_ok(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(SECURITY_REVIEW_NA, encoding="utf-8")
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertTrue(res.passed)
+            self.assertIn("n/a", res.detail)
+
+    def test_flag_yes_with_blocked_artifact_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(SECURITY_REVIEW_BLOCKED, encoding="utf-8")
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertFalse(res.passed)
+            self.assertIn("blocked", res.detail)
+
+    def test_flag_yes_with_missing_decision_field_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sprint = self._make_sprint(Path(tmp), PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(
+                SECURITY_REVIEW_MISSING_DECISION, encoding="utf-8"
+            )
+            res = sc.check_scope_artifact(
+                sprint, flag_name="security-review",
+                artifact_filename="SECURITY-REVIEW.md",
+                check_name="security_review",
+            )
+            self.assertFalse(res.passed)
+            self.assertIn("Decision", res.detail)
+
+
+# ---------------------------------------------------------------------------
 # End-to-end orchestration
 # ---------------------------------------------------------------------------
 
@@ -397,6 +677,117 @@ class RunCloseTests(unittest.TestCase):
             self.assertFalse(report.locked)
             sessions = next(c for c in report.checks if c.name == "sessions_logged")
             self.assertFalse(sessions.passed)
+
+    def test_scope_flag_yes_blocks_close_without_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_SECURITY_REQUIRED)
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            self.assertFalse((sprint / ".lock").exists())
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("security_review", failing)
+
+    def test_scope_flag_yes_with_passed_artifact_locks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(
+                SECURITY_REVIEW_PASSED, encoding="utf-8"
+            )
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(
+                report.locked,
+                msg=[c for c in report.checks if not c.passed],
+            )
+
+    def test_scope_flag_yes_with_blocked_artifact_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_SECURITY_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(
+                SECURITY_REVIEW_BLOCKED, encoding="utf-8"
+            )
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("security_review", failing)
+
+    def test_ui_qa_flag_yes_blocks_without_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_UI_REQUIRED)
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("ui_qa", failing)
+
+    def test_ui_qa_flag_yes_with_blocked_artifact_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_UI_REQUIRED)
+            (sprint / "UI-QA.md").write_text(UI_QA_BLOCKED, encoding="utf-8")
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("ui_qa", failing)
+
+    def test_both_scopes_required_both_artifacts_needed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_BOTH_REQUIRED)
+            # Only security artifact — UI QA still missing.
+            (sprint / "SECURITY-REVIEW.md").write_text(
+                SECURITY_REVIEW_PASSED, encoding="utf-8"
+            )
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertFalse(report.locked)
+            failing = {c.name for c in report.checks if not c.passed}
+            self.assertIn("ui_qa", failing)
+            self.assertNotIn("security_review", failing)
+
+    def test_both_scopes_required_both_passed_locks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_BOTH_REQUIRED)
+            (sprint / "SECURITY-REVIEW.md").write_text(
+                SECURITY_REVIEW_PASSED, encoding="utf-8"
+            )
+            (sprint / "UI-QA.md").write_text(UI_QA_PASSED, encoding="utf-8")
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(
+                report.locked,
+                msg=[c for c in report.checks if not c.passed],
+            )
+
+    def test_scope_flag_unfilled_template_does_not_block(self):
+        # The PRD template literally reads "Yes / No" until filled in.
+        # That state is "unspecified" — do not refuse to lock on a missing
+        # artifact, since minimum-viable adoption uses the template verbatim.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, sprint = _build_sprint(Path(tmp), prd=PRD_UNFILLED_TEMPLATE)
+            report = sc.run_close(
+                sprint_dir=sprint, repo_root=repo,
+                reviewer_arg=None, strict_symbols=False, dry_run=False,
+            )
+            self.assertTrue(
+                report.locked,
+                msg=[c for c in report.checks if not c.passed],
+            )
 
     def test_already_locked_short_circuits(self):
         with tempfile.TemporaryDirectory() as tmp:

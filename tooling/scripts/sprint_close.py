@@ -14,6 +14,10 @@ What this script will refuse to lock:
   - A sprint whose RETRO.md is still recognizably the template (unfilled
     `<placeholder>` brackets, literal `vN`, literal `YYYY-MM-DD`, or empty
     bullet lists for the "What went well / poorly" sections).
+  - A sprint whose PRD.md declares `/security-review required: Yes` but
+    has no `SECURITY-REVIEW.md` artifact (same for `/ui-qa` and UI-QA.md).
+    The artifact must contain `Reviewer:`, `Date:`, and `Decision:` fields;
+    `Decision: blocked` is a refusal.
   - A sprint without a sign-off (either `sprints/vN/SIGNOFF.md` containing
     `Reviewer:` + `Date:` lines, or `--reviewer NAME` passed on the CLI to
     create one).
@@ -309,6 +313,156 @@ def check_sessions_logged(
     )
 
 
+# Valid `Decision:` values in a scope artifact (SECURITY-REVIEW.md / UI-QA.md).
+_SCOPE_DECISIONS = ("passed", "n/a", "blocked")
+
+
+def _parse_prd_scope_flag(prd_path: Path, flag_name: str) -> Optional[bool]:
+    """Parse whether `/security-review` or `/ui-qa` is required for this sprint.
+
+    Looks for a line like ``- **`/security-review` required:** Yes`` in
+    ``PRD.md``. Returns True/False if the flag is decisively set, or None
+    if the line is missing or still the unfilled template (``Yes / No``).
+    None means "treat as unspecified" — the close does not refuse on a
+    missing artifact in that case, but the check result makes the ambiguity
+    visible in the report.
+    """
+    if not prd_path.is_file():
+        return None
+    text = prd_path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"^\s*[-*]\s*\*\*`/{re.escape(flag_name)}`\s+required:\*\*\s*(.+?)\s*$",
+        re.MULTILINE,
+    )
+    m = pattern.search(text)
+    if not m:
+        return None
+    value = m.group(1).strip().lower()
+    # Unfilled template literally reads "yes / no" — treat as unspecified.
+    if re.fullmatch(r"yes\s*/\s*no", value):
+        return None
+    if value in ("yes", "y", "true", "required"):
+        return True
+    if value in ("no", "n", "false", "not required", "n/a"):
+        return False
+    return None
+
+
+def _parse_scope_artifact(artifact_path: Path) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Return (reviewer, date, decision) from a SECURITY-REVIEW.md / UI-QA.md.
+
+    Any field that isn't present or doesn't match the expected shape comes
+    back as None. The caller decides how to treat partial parses.
+    """
+    if not artifact_path.is_file():
+        return (None, None, None)
+    text = artifact_path.read_text(encoding="utf-8")
+    rev_match = re.search(r"^\s*\*{0,2}Reviewer:\*{0,2}\s*(.+?)\s*$", text, re.MULTILINE)
+    date_match = re.search(
+        r"^\s*\*{0,2}Date:\*{0,2}\s*(\d{4}-\d{2}-\d{2})\s*$",
+        text,
+        re.MULTILINE,
+    )
+    decision_match = re.search(
+        r"^\s*\*{0,2}Decision:\*{0,2}\s*(passed|n/?a|blocked)\s*$",
+        text,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    reviewer = rev_match.group(1).strip() if rev_match else None
+    date = date_match.group(1) if date_match else None
+    decision = decision_match.group(1).strip().lower().replace("n/a", "n/a") if decision_match else None
+    if decision == "na":
+        decision = "n/a"
+    return (reviewer, date, decision)
+
+
+def check_scope_artifact(
+    sprint_dir: Path,
+    *,
+    flag_name: str,
+    artifact_filename: str,
+    check_name: str,
+) -> CheckResult:
+    """Verify a scope artifact (SECURITY-REVIEW.md / UI-QA.md) matches the PRD flag.
+
+    Behavior:
+    - PRD flag unspecified (missing or literal ``Yes / No`` stub): pass with
+      a note; the engineer is responsible for setting the flag, but we do
+      not refuse to lock on an unfilled template.
+    - PRD flag ``No``: pass (scope not required).
+    - PRD flag ``Yes`` and artifact missing: refuse.
+    - PRD flag ``Yes`` and artifact missing ``Reviewer:`` / ``Date:`` /
+      ``Decision:`` fields: refuse with the specific missing field named.
+    - PRD flag ``Yes`` and ``Decision: blocked``: refuse with the blocker.
+    - PRD flag ``Yes`` and ``Decision: passed`` or ``Decision: n/a``: pass.
+    """
+    prd_path = sprint_dir / "PRD.md"
+    required = _parse_prd_scope_flag(prd_path, flag_name)
+    artifact_path = sprint_dir / artifact_filename
+
+    if required is None:
+        return CheckResult(
+            check_name,
+            True,
+            f"PRD `/{flag_name}` flag unspecified; artifact check skipped",
+        )
+    if required is False:
+        return CheckResult(
+            check_name,
+            True,
+            f"PRD declares /{flag_name} not required for this sprint",
+        )
+
+    # required is True — artifact must exist and pass.
+    if not artifact_path.is_file():
+        return CheckResult(
+            check_name,
+            False,
+            (
+                f"PRD requires /{flag_name} but {artifact_filename} is missing — "
+                f"run /{flag_name} and commit the artifact"
+            ),
+        )
+    reviewer, date, decision = _parse_scope_artifact(artifact_path)
+    missing_fields = [
+        name for name, value in
+        (("Reviewer", reviewer), ("Date", date), ("Decision", decision))
+        if not value
+    ]
+    if missing_fields:
+        return CheckResult(
+            check_name,
+            False,
+            (
+                f"{artifact_filename} missing field(s): {', '.join(missing_fields)} "
+                f"(expected Reviewer / Date / Decision)"
+            ),
+        )
+    if decision not in _SCOPE_DECISIONS:
+        return CheckResult(
+            check_name,
+            False,
+            (
+                f"{artifact_filename} has Decision: {decision!r} — must be one of "
+                f"{', '.join(_SCOPE_DECISIONS)}"
+            ),
+        )
+    if decision == "blocked":
+        return CheckResult(
+            check_name,
+            False,
+            (
+                f"{artifact_filename} Decision: blocked — resolve the blocker and "
+                f"re-run /{flag_name} before closing"
+            ),
+        )
+    return CheckResult(
+        check_name,
+        True,
+        f"{artifact_filename} Decision: {decision} (reviewer={reviewer!r}, date={date})",
+    )
+
+
 def check_signoff(
     sprint_dir: Path,
     reviewer_arg: Optional[str],
@@ -389,6 +543,18 @@ def run_close(
     report.checks.append(check_reconcile(sprint_dir, repo_root, strict_symbols))
     report.checks.append(check_retro_filled(sprint_dir))
     report.checks.append(check_sessions_logged(sprint_dir, repo_root))
+    report.checks.append(check_scope_artifact(
+        sprint_dir,
+        flag_name="security-review",
+        artifact_filename="SECURITY-REVIEW.md",
+        check_name="security_review",
+    ))
+    report.checks.append(check_scope_artifact(
+        sprint_dir,
+        flag_name="ui-qa",
+        artifact_filename="UI-QA.md",
+        check_name="ui_qa",
+    ))
 
     signoff_result, reviewer = check_signoff(sprint_dir, reviewer_arg)
     report.checks.append(signoff_result)

@@ -38,8 +38,8 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
    - `RETRO.md` — filled in (not the template stub). The skill walks the engineer through it section by section if empty.
    - `WALKTHROUGH.md` — written or signed off. For client-facing engagements, this is the projection the client sees; for internal products, it's a short demo script.
    - Sign-off — either an existing `SIGNOFF.md` with `Reviewer:` + `Date:` lines, or a reviewer name to pass as `--reviewer` on the CLI.
-2. **Runs `/security-review` if the PRD said `Yes`** in the security-scope line. Security is now a structural CI gate (semgrep), but the manual review is the judgment layer — the gate catches mechanically-detectable issues, the review catches design-level ones.
-3. **Runs `/ui-qa` if the PRD said `Yes`.** Skipping UI QA on UI-scope sprints because "it probably works" is exactly the kind of omission that lands as an `/incident` three weeks later.
+2. **Invokes `/security-review` if the PRD said `Yes`** in the security-scope line. `/security-review` writes `sprints/vN/SECURITY-REVIEW.md`; `sprint_close.py` refuses to lock when the PRD says `Yes` and that artifact is missing or marked `Decision: blocked`. Security is structurally enforced on two layers now: the Semgrep CI gate catches mechanically-detectable issues, the manual review catches design-level ones.
+3. **Invokes `/ui-qa` if the PRD said `Yes`.** `/ui-qa` writes `sprints/vN/UI-QA.md`; `sprint_close.py` refuses to lock when the PRD says `Yes` and that artifact is missing or blocked. Skipping UI QA because "it probably works" used to be the kind of omission that landed as an `/incident` three weeks later — the close now refuses structurally.
 4. **Orchestrates the retro.** Fills `RETRO.md` by asking about: what went well, what went poorly, what surprised the team, what to carry forward, what to drop. Pushes for specifics — "communication was bad" is not a finding. The retro is a `sprint_close.py` gate: template markers (`<placeholder>`, `vN`, `YYYY-MM-DD`) in the file will cause the close to refuse.
 5. **Verifies the deferred aggregate view is in sync** with the `[DEFERRED]` tasks. If a requirement was silently dropped (no `[DEFERRED]` entry, but also no `[x]` task covering it), `reconcile.py --ci` will surface the gap and `sprint_close.py` will refuse.
 6. **Invokes `sprint_close.py`:**
@@ -65,6 +65,9 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 - **`reconcile.py --ci` fails with a missing requirement.** Either the requirement needs a task (re-open the sprint briefly, add the task, run `/dev`), or it needs a `[DEFERRED]` entry with `Target:` and `Reason:`. Silent drop is not an option.
 - **Symbol-presence `STUB-WARNING:` on a `[x]` task.** The task claims to be done but the files don't contain the symbols the title/acceptance imply. Either finish the implementation or un-mark the task.
 - **`sessions_logged` fails with "no session events logged for vN".** `sprint_close.py` refuses to lock a sprint with zero logged sessions when the `metrics/` module is installed. The fix is honesty: if sessions happened and weren't logged, log them retroactively from memory; if you genuinely never logged any, that's the signal the discipline hasn't landed yet and the retro should call it out. If the repo is on the minimum-viable adoption path (no `metrics/` module), the check passes with a "not installed" note — this refusal mode only fires for teams that opted into metrics logging.
+- **`security_review` / `ui_qa` fails with "SECURITY-REVIEW.md is missing" or "UI-QA.md is missing".** The PRD's scope flag says `Yes` but no artifact is committed. Run `/security-review` or `/ui-qa`; commit the artifact; re-run `/sprint-close`.
+- **`security_review` / `ui_qa` fails with "missing field(s): Decision".** The artifact exists but the reviewer never signed the `Decision:` line. Get the sign; don't forge.
+- **`security_review` / `ui_qa` fails with "Decision: blocked".** Working as intended. Resolve the blocker, re-run the scope skill, commit the updated artifact with `Decision: passed`.
 - **No SIGNOFF.md and `--reviewer` not passed.** Pass `--reviewer NAME` or get a reviewer to create SIGNOFF.md and re-run.
 
 ## Interaction with other skills
@@ -80,5 +83,5 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 - `sprints/vN/SIGNOFF.md` exists with a real reviewer name and today's date.
 - `python3 scripts/reconcile.py sprints/vN --ci` exit code 0.
 - `sprints/vN/.lock` written with `locked_at`, `reviewer`, and `reconcile_status` fields.
-- If scope required it: `/security-review` and `/ui-qa` both signed off.
+- If scope required it: `sprints/vN/SECURITY-REVIEW.md` and/or `sprints/vN/UI-QA.md` committed with `Decision: passed` or `Decision: n/a` (the close refuses structurally if they are missing or blocked).
 - The engineer has reviewed the close artifacts and is ready to commit.
