@@ -72,13 +72,26 @@ Refuse to proceed if:
    claiming the same requirement is legitimate when they cover
    different slices; worth reviewing otherwise. Note the decision
    in the analysis.
-5. **Re-runs the script in `--ci` mode to confirm.**
+5. **Runs an upstream-completeness pass against the intake.** Beyond the
+   IDs that are already in the design doc, ask: are there things the intake
+   surfaced (`docs/intake/*.md`, especially Section 7.5 — completeness
+   pass) that *never made it into the design doc* with a stable ID? This
+   is the harder failure mode — `gap.py` can only audit what's already a
+   §X.Y; it can't audit what was silently dropped between intake and
+   design. For every Section 7.5 category that captured a real
+   requirement, confirm a stable ID exists in the design doc. For every
+   category marked "N/A because X," confirm the reason is reflected in
+   the design doc's Assumptions section. If any are missing, document
+   them in the analysis's "Notes" section as candidates for a design-doc
+   amendment PR. Do not invent IDs in `/gap` — the amendment is a
+   separate review against the design document.
+6. **Re-runs the script in `--ci` mode to confirm.**
    ```bash
    python3 tooling/scripts/gap.py docs/<INITIATIVE>.md sprints/ --ci
    ```
    Exit 0 is the clean signal. Exit 2 means orphans remain — loop back
    to step 3. Exit 1 means conflicts remain — loop back to step 4.
-6. **Commits the updated analysis.** Commit the
+7. **Commits the updated analysis.** Commit the
    `docs/<INITIATIVE>_GAP_ANALYSIS.md` file. This is the artifact
    `/sprint-close` reads to decide whether to refuse the lock.
 
