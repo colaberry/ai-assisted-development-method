@@ -91,6 +91,52 @@
 
 ---
 
+## Section 7.5: Completeness pass `[REQUIRED]`
+
+Walk every category below. For each one, **either capture a requirement or write an explicit "N/A because <one-line reason>" entry.** A blank field is silent drop — that's the failure mode this section exists to prevent. Discovering at acceptance that nobody asked about, e.g., audit logging, is expensive; asking once at intake is cheap.
+
+This is *enumeration discipline*, not a brainstorming prompt. Walk the list.
+
+- **Functional — primary user journeys:** (covered above in Section 3? If not, add.)
+- **Functional — admin / operator journeys:** (who configures, who troubleshoots, who deactivates accounts; almost always missed if not asked)
+- **Functional — error-state UX:** (what does the user see when X is down, when input is bad, when an upstream call times out — concrete, not "good error messages")
+- **Non-functional — performance:** (covered in Section 6? Confirm specific numbers, not adjectives.)
+- **Non-functional — availability / SLA:** (Section 6)
+- **Non-functional — scale:** (Section 6 — confirm both data volume and concurrent-user numbers)
+- **Security — authn / authz:** (who logs in, what roles, what can each role do, where do credentials live)
+- **Security — data classification:** (PII, PHI, PCI, trade-secret — what categories exist in this system)
+- **Security — encryption in transit and at rest:** (specific algorithms or "industry standard"; client may have a policy)
+- **Security — audit logging:** (what events get logged, retained how long, viewable by whom)
+- **Security — secrets management:** (where do API keys, DB passwords, signing keys live; rotation policy)
+- **Security — third-party / supply chain:** (any banned vendors, any required vendor reviews, dependency licensing constraints)
+- **Compliance — regulatory frameworks in scope:** (Section 6 lists; this asks per-framework what controls apply)
+- **Compliance — data residency / cross-border:** (Section 6)
+- **Compliance — retention and deletion:** (data retention windows, right-to-erasure handling, legal hold)
+- **Observability — logging:** (what gets logged at what level, where logs go, how long retained)
+- **Observability — metrics:** (what business and system metrics, how surfaced, who watches)
+- **Observability — tracing:** (distributed tracing requirements; usually only needed at scale)
+- **Observability — alerting:** (who gets paged for what, on what channel, with what runbook)
+- **Failure modes — what happens when each external dependency is down:** (graceful degradation? hard fail? queue and retry?)
+- **Failure modes — data loss tolerance:** (RPO — how much data can we afford to lose; usually not zero, but rarely asked)
+- **Failure modes — recovery time:** (RTO — how long can the system be down before it's a major incident)
+- **Failure modes — disaster recovery:** (backups, restore drills, multi-region, cold-standby)
+- **Data — sources of truth:** (which system owns which entity; conflict resolution if two systems disagree)
+- **Data — migration from existing system:** (what data moves over, in what format, with what validation, on what cutover plan)
+- **Data — schema evolution policy:** (how do we add a column without breaking integrations; who approves schema changes)
+- **Operations — who deploys:** (us, the client, mixed; what cadence; what change-management process)
+- **Operations — who is on call:** (us, the client, neither; what hours; what escalation)
+- **Operations — runbooks:** (do we deliver any; do they have a template we have to match)
+- **Operations — capacity planning:** (when does the system need to scale up; who notices; who funds the increase)
+- **Accessibility:** (WCAG level required; specific assistive tech the client's users use)
+- **Internationalization / localization:** (languages, locales, currencies, date formats; usually English-only by default — confirm explicitly)
+- **Documentation deliverables:** (user docs, admin docs, API docs, architecture docs, training material — what does the SOW require)
+- **Training and handover:** (do we train end-users, ops staff, in-house developers; how is that scoped)
+- **Decommissioning / exit:** (how does the client exit this engagement, take their data, run the system without us; uncomfortable but cheap to ask now)
+
+Anything captured here that turns out to be load-bearing should be lifted into one of the prior sections (with a stable ID). The point of this section isn't to *be* the requirement source — it's to make sure no category got silently skipped before the design doc starts.
+
+---
+
 ## Section 8: What the client gave us `[OPTIONAL but valuable]`
 
 Attach or link. More is better; raw is better than cleaned up.
@@ -156,6 +202,7 @@ Your tech lead's honest assessment, written before the design doc exists. Revisi
 Before this intake document is considered complete enough to drive Phase 0 design-doc authoring:
 
 - [ ] All `[REQUIRED]` sections filled (no "TBD" placeholders — "UNKNOWN — need to ask X" is acceptable but counts as an open question)
+- [ ] Section 7.5 completeness pass walked end to end — every category has a captured requirement or an explicit "N/A because X" entry
 - [ ] Open questions list is populated and owners assigned
 - [ ] Tech lead has signed off that the intake reflects what was actually said
 - [ ] Client champion has reviewed this intake for accuracy (send it to them; capture their corrections)
@@ -182,6 +229,12 @@ the sole source of truth about what the client said:
    SOW-§X.Y.
 3. Run an ambiguity pass on your own draft: list questions the client would
    need to answer before this document can be signed off.
+3a. Cross-check the draft against Section 7.5 (Completeness pass). For every
+   category there marked with a real requirement, confirm a corresponding
+   stable ID exists in the design doc. For every category marked "N/A
+   because X," surface the reason as an explicit assumption in the
+   Assumptions section. Silent omission of a 7.5 category in the design doc
+   is a defect.
 4. Propose a first-sprint scope — a subset of requirements that can be
    delivered in 1–2 weeks and that demonstrates enough value that the client
    would want to continue.
