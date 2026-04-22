@@ -103,11 +103,11 @@ Before writing any test code, you write down the plan. Five categories. You do t
 
 **Category E is where teams leak architectural decay.** Example: you delete a deprecated function. Three months later someone re-adds it because they didn't know it was deprecated. An E test that asserts `assert 'old_function' not in inspect.getsource(auth_module)` prevents this.
 
-### 1.3 Separate sessions for tests and implementation
+### 1.3 Separate sessions for tests and implementation (`/dev-test` → `/dev-impl`)
 
-This is the single most important practical rule in the method. It's also the one most engineers initially dismiss as ceremony.
+This is the single most important practical rule in the method. It's also the one most engineers initially dismiss as ceremony — which is why it is now structurally enforced.
 
-**The mechanic:** Start a fresh Claude Code session for writing tests. Close it. Start a new one for implementation. The new session reads the committed failing tests as input but has no context on what the intended implementation looks like.
+**The mechanic:** Run `/dev-test` in a fresh Claude Code session to write the failing tests. Commit them. The skill drops a marker file naming the task and the commit SHA of the tests. Close the session. Open a new one and run `/dev-impl`. It refuses to start unless the marker exists and the current session is a different session from the one that wrote the tests — that check is done by `dev_session.py`. The implementation session reads the committed failing tests as input but has no context on what the intended implementation looks like.
 
 **Why it matters:** When Claude Code can see the implementation being planned, it writes tests that match the implementation. That's not test-first development; that's elaborate test-after dressed up as TDD. You get tests that pass when the code ships and that still pass when the code is broken, because they were written to describe the code, not the behavior.
 
@@ -157,7 +157,7 @@ The good rule is specific enough that you could implement it as a linter check o
 **Where every prevention rule has to live.** Check at least one box. An entry without a "lives in" placement is a wish, not a rule.
 
 - [ ] Added to CLAUDE.md under "Never-do rules"
-- [ ] Added to `/dev` Step 2.5 test-matrix guidance for category X
+- [ ] Added to `/dev-test` Step 2.5 test-matrix guidance for category X
 - [ ] Added as a CI check
 - [ ] Implemented as an architecture-guard test (Category E)
 - [ ] Added to `/security-review` or ambiguity-pass prompt
@@ -191,7 +191,7 @@ You are in the wrong place if any of these are true:
 - You keep discovering new requirements that weren't in the PRD.
 - You've modified tests twice to make them match what the code is actually doing.
 
-These are not implementation problems. They are specification problems, and they won't be fixed by more `/dev` rounds. Stop, go back to `sprints/vN/PRD.md` or `docs/<INITIATIVE>.md`, and re-read the relevant section. If the spec is genuinely ambiguous, run a focused ambiguity pass and produce questions for a human — do not invent answers.
+These are not implementation problems. They are specification problems, and they won't be fixed by more `/dev-test` or `/dev-impl` rounds. Stop, go back to `sprints/vN/PRD.md` or `docs/<INITIATIVE>.md`, and re-read the relevant section. If the spec is genuinely ambiguous, run a focused ambiguity pass and produce questions for a human — do not invent answers.
 
 The rule: **third round of "fix this, still broken" means the spec is the problem, not the code.**
 
@@ -242,7 +242,7 @@ The manual `/security-review` checklist remains — as the *escalation path*, no
 
 ### 1.10 Tuning autonomy with `Autonomy:` annotations
 
-Not every task carries the same risk. A doc fix is not a payment-path migration. The `Autonomy:` annotation on a task lets you tell `/dev` how much human checkpointing to do mid-task — instead of using one cadence for everything.
+Not every task carries the same risk. A doc fix is not a payment-path migration. The `Autonomy:` annotation on a task lets you tell `/dev-impl` how much human checkpointing to do mid-task — instead of using one cadence for everything.
 
 Three valid levels:
 
@@ -268,7 +268,7 @@ The annotation sits in the task block alongside `Satisfies:`, `Files:`, etc.:
 
 If you're unsure, default to `checkpoint`. Going one level more cautious costs minutes; going one level less cautious can ship a regression.
 
-**What the tooling does with it.** `reconcile.py` parses `Autonomy:` and surfaces invalid values to stderr (`yolo` is not a level). It does not currently fail on autonomy alone — the annotation is advisory. Once the `/dev` skill ships, it reads this field to decide checkpointing cadence. Even before then, the annotation serves as documentation for human reviewers: a PR landing a `review-only` task with no checkpoint comments in the conversation history is a smell worth surfacing in code review.
+**What the tooling does with it.** `reconcile.py` parses `Autonomy:` and surfaces invalid values to stderr (`yolo` is not a level). It does not currently fail on autonomy alone — the annotation is advisory. `/dev-impl` reads this field to decide checkpointing cadence during implementation. The annotation also serves as documentation for human reviewers: a PR landing a `review-only` task with no checkpoint comments in the conversation history is a smell worth surfacing in code review.
 
 **What the annotation does not replace.** It does not replace test coverage, the security gate, or the test matrix. `Autonomy: direct` does not mean "skip Category D"; it means "given that the test matrix is satisfied, proceed without mid-task pauses." If you're tempted to use `direct` to cut testing, the testing is the problem to solve, not the cadence.
 
@@ -308,7 +308,7 @@ This section is about how to talk to Claude Code specifically in the context of 
 
 ### 2.1 The task kickoff prompt
 
-Start every `/dev` session with the same structure:
+Start every `/dev-test` session with the same structure (the implementation session inherits the same spec by reading the committed tests):
 
 ```
 I'm working on task TNNN in sprints/vN/TASKS.md. Before writing any code:
@@ -329,7 +329,7 @@ This takes Claude Code 2–3 minutes to execute and catches 80% of the "Claude C
 
 ### 2.2 Keeping context clean between sessions
 
-**Each `/dev` session = one task.** Don't batch. Batching is the single fastest way to get Claude Code to shortcut later tasks in favor of earlier ones — the later tasks get shallower work as context fills up.
+**Each `/dev-test` or `/dev-impl` session = one task.** Don't batch. Batching is the single fastest way to get Claude Code to shortcut later tasks in favor of earlier ones — the later tasks get shallower work as context fills up. `dev_session.py` enforces this: a second `/dev-test` or `/dev-impl` kickoff inside the same session is refused.
 
 **Each test-writing session = no implementation context.** Per 1.3, this is non-negotiable.
 
@@ -436,7 +436,7 @@ The method front-loads specification work that used to be deferred. What feels l
 
 **Parallel discovery interviews.** Phase 0 is usually serialized by calendar. Run two or three discovery calls on the same day. Fill the intake during the call, not after. Collapses a week of scheduling into hours.
 
-**Parallel tasks within a sprint.** The "one task per session" rule is about context, not about serializing the team. Three engineers running three `/dev` sessions on three different tasks simultaneously is fine. `/reconcile` in CI keeps them consistent.
+**Parallel tasks within a sprint.** The "one task per session" rule is about context, not about serializing the team. Three engineers running three `/dev-test` or `/dev-impl` sessions on three different tasks simultaneously is fine — each task has its own `Files:` allowlist, and `sprint_gate.py` keeps them from stepping on each other. `/reconcile` in CI keeps them consistent at the requirement-coverage level.
 
 **Parallel Claude Code sessions for independent design-doc sections.** When drafting a design doc for a complex initiative, don't serialize it. Three sessions on auth, data flows, and UI simultaneously; merge outputs. This is the same pattern `/gap` uses, applied earlier.
 
@@ -510,7 +510,7 @@ If the method feels slow after five initiatives, look for these specific problem
 
 ### Never do
 
-- Batch tasks in one `/dev` session
+- Batch tasks in one `/dev-test` or `/dev-impl` session
 - Write tests and implementation in the same session
 - Modify tests to match code
 - Skip the test matrix

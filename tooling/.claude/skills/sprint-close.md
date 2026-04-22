@@ -29,6 +29,7 @@ Refuse to proceed if:
 - **The target sprint already has a `.lock` file** — it's already closed. Don't re-run.
 - **Tests are red** — green suite is the baseline. Failing CI is a pre-close blocker.
 - **P0 flags present** — resolve them first. They usually indicate exactly the kind of structural problem `/sprint-close` would trip over anyway.
+- **Initiative-level gap analysis is missing or stale.** `state-check.py` emits a P1 `gap_analysis_staleness` flag when `docs/<INITIATIVE>_GAP_ANALYSIS.md` is missing or older than the newest sprint `.lock`. Run `/gap` first — `sprint_close.py` refuses to lock while orphaned initiative requirements exist, and a stale analysis silently hides new orphans.
 
 Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` date. If any are still `[ ]`, stop and list them.
 
@@ -63,6 +64,7 @@ Also verify: every non-deferred task in TASKS.md is `[x]` with a `Completed:` da
 
 - **RETRO.md still has template markers.** Re-run the retro walk-through. The placeholders exist because no one filled them in; the fix is filling them in, not deleting them.
 - **`reconcile.py --ci` fails with a missing requirement.** Either the requirement needs a task (re-open the sprint briefly, add the task, run `/dev-test` then `/dev-impl` in separate sessions), or it needs a `[DEFERRED]` entry with `Target:` and `Reason:`. Silent drop is not an option.
+- **Orphaned initiative requirement (gap analysis failure).** The sprint reconciles green but the initiative-level `docs/<INITIATIVE>_GAP_ANALYSIS.md` shows a requirement that was never picked up in any sprint PRD. Run `/gap`, decide on each orphan (scope into this sprint, `[DEFERRED]` with `Target:`, or design-doc amendment), re-run `/gap --ci` to exit 0, then re-run `/sprint-close`. This is the initiative-boundary gate; it complements the per-sprint `/reconcile` gate and exists specifically because a requirement can reconcile green in every sprint while never actually being touched.
 - **Symbol-presence `STUB-WARNING:` on a `[x]` task.** The task claims to be done but the files don't contain the symbols the title/acceptance imply. Either finish the implementation or un-mark the task.
 - **`sessions_logged` fails with "no session events logged for vN".** `sprint_close.py` refuses to lock a sprint with zero logged sessions when the `metrics/` module is installed. The fix is honesty: if sessions happened and weren't logged, log them retroactively from memory; if you genuinely never logged any, that's the signal the discipline hasn't landed yet and the retro should call it out. If the repo is on the minimum-viable adoption path (no `metrics/` module), the check passes with a "not installed" note — this refusal mode only fires for teams that opted into metrics logging.
 - **`security_review` / `ui_qa` fails with "SECURITY-REVIEW.md is missing" or "UI-QA.md is missing".** The PRD's scope flag says `Yes` but no artifact is committed. Run `/security-review` or `/ui-qa`; commit the artifact; re-run `/sprint-close`.

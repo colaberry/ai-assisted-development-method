@@ -55,9 +55,18 @@ If `state-check.py` reports P0 flags, resolve them first.
    marker's commit is ahead of HEAD or the wrong tests were committed;
    stop and return to `/dev-test`.
 4. **Implements against the failing tests.** Works only against the
-   files listed in `Files:`. If implementation naturally requires
-   touching a file not on that list, stops and surfaces it — unplanned
-   file creep is the signal of scope drift, not a thing to paper over.
+   files listed in `Files:`. This isn't a soft norm — `sprint_gate.py`
+   runs as a PreToolUse hook and structurally blocks `Edit`/`Write` calls
+   against any path not on the active task's `Files:` allowlist. If
+   implementation naturally requires touching a file not on that list,
+   the hook will refuse the write and the skill must stop and surface
+   the drift to the engineer. Resolution paths: (a) the new file is in
+   scope and the task's `Files:` line was incomplete — close the
+   `/dev-impl` session, edit `Files:` in TASKS.md, restart `/dev-impl`;
+   (b) the new file is *out* of scope and the implementation is creeping
+   — stop, log the realization in the failures-log draft, and either
+   shrink the implementation or split a follow-up task. Silently
+   expanding `Files:` to make the hook pass defeats the gate.
 5. **Runs the full relevant test suite** (unit + integration +
    architecture guards that cover touched modules). Does not declare
    done on a subset. For UI work, exercises the feature in a browser

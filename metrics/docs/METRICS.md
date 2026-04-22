@@ -55,7 +55,7 @@ Gate events are the highest-signal lowest-cost metric you can capture. They take
 
 ### Event type: `session`
 
-Logged at the end of every work session — whether it's a `/dev` task, a test-authoring session in a separate context, a code review, or an ad-hoc investigation. The logging is done by the engineer (or the skill wrapping the engineer's session) via `log-session`, and `sprint_close.py` structurally refuses to lock a sprint with zero logged sessions. That turns session logging from cultural discipline into a hard gate.
+Logged at the end of every work session — whether it's a `/dev-test` or `/dev-impl` task session, a code review, or an ad-hoc investigation. The logging is done by the engineer (or the skill wrapping the engineer's session) via `log-session`, and `sprint_close.py` structurally refuses to lock a sprint with zero logged sessions. That turns session logging from cultural discipline into a hard gate.
 
 | Field | Meaning |
 |---|---|
@@ -69,6 +69,17 @@ Logged at the end of every work session — whether it's a `/dev` task, a test-a
 **Why the `rework` flag.** Rework rate is the single highest-signal indicator that a sprint's scope or spec quality is off. A sprint with 40% rework sessions is telling you something the gate-pass rate is not. We record it today so that when thresholds are calibrated, the data is already there. Until then: record honestly, discuss in retro, don't react to single-sprint numbers.
 
 **What is deliberately NOT in this schema.** No `engineer` field — individual attribution creates bad incentives and doesn't answer any method-calibration question. No token counts — they're coming once cost-per-sprint becomes worth tracking against real engagement data. No `duration` field — durations self-report badly (engineers over-report short sessions and under-report long ones) and aren't worth the noise.
+
+**On-disk shape.** Each event is one JSON object per line in `metrics/events.jsonl`:
+
+```json
+{"ts": "2026-04-21T17:32:14Z", "event_type": "session", "sprint": "v3", "kind": "tests", "task": "T007"}
+{"ts": "2026-04-21T18:45:02Z", "event_type": "session", "sprint": "v3", "kind": "dev", "task": "T007"}
+{"ts": "2026-04-21T20:11:48Z", "event_type": "session", "sprint": "v3", "kind": "dev", "task": "T004", "rework": true}
+{"ts": "2026-04-21T20:14:33Z", "event_type": "gate", "gate": "reconcile", "result": "pass"}
+```
+
+JSONL means: one line per event, append-only, never rewrite history. `sprint_close.py` reads this file directly to confirm the active sprint has at least one session event before allowing the lock.
 
 ---
 
@@ -101,7 +112,7 @@ python3 metrics/scripts/metrics.py log-gate --gate gap --result pass --findings 
 
 ### Logging a work session
 
-At the end of every `/dev` session, test-authoring session, or code review:
+At the end of every `/dev-test`, `/dev-impl`, or code-review session:
 
 ```bash
 # Ordinary dev session on a specific task
@@ -254,4 +265,4 @@ Tools are levers. If the lever isn't moving anything, put it down.
 | Count sessions for a sprint | `metrics.py count-sessions --sprint v3 --json` |
 | List just session events | `metrics.py list-events --event-type session --sprint v3` |
 
-**Default mental model.** Wire `log-gate` into every gate workflow with `if: always()`. Log a session event at the end of every `/dev` / test-authoring / review session — the `sprint_close.py` check will bounce the lock if you don't. Read the raw session counts in retro. Defer threshold-based interpretation (healthy / high / low) until real engagement data calibrates the ranges in a follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13).
+**Default mental model.** Wire `log-gate` into every gate workflow with `if: always()`. Log a session event at the end of every `/dev-test`, `/dev-impl`, or code-review session — the `sprint_close.py` check will bounce the lock if you don't. Read the raw session counts in retro. Defer threshold-based interpretation (healthy / high / low) until real engagement data calibrates the ranges in a follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13).

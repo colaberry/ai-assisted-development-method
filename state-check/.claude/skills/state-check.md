@@ -139,6 +139,15 @@ Ask: what changed in the test files, and why?
 - If the engineer can name a specific test that was wrong and describe why: fine, confirm that a note was added to the commit message or the retro, move on.
 - If the engineer is vague ("just cleanup," "refactoring"): flag this. Suggest they review the diff themselves with fresh eyes before merging. This is the specific failure mode Method Rule 4 guards against.
 
+### State: Gap analysis missing or stale (`gap_analysis_staleness`)
+
+The CLI flagged this as a P1 traceability issue. Two shapes:
+
+- **Missing:** `docs/<INITIATIVE>_GAP_ANALYSIS.md` does not exist for a design doc that has sprints against it. The initiative has never been audited for orphans. Before the next `/sprint-close`, run `/gap` on that initiative — `sprint_close.py` refuses to lock while orphans remain, and without an analysis there's no way to know whether any do.
+- **Stale:** The analysis exists but its mtime is older than the newest sprint `.lock`. Sprints have been closed since the last audit. Orphans added by those sprints haven't been surfaced. Run `/gap` to refresh.
+
+In both cases the next action is `/gap` on the named initiative, not "keep going on the current task." Surface this plainly to the engineer.
+
 ### State: Failures log has many entries but few recent prunes
 
 The CLI flagged this as a P2 memory issue. Don't push hard; just note it:

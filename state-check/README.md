@@ -25,7 +25,7 @@ These are a **pair**. The CLI does mechanical state detection; the skill wraps i
 ## What the pair does NOT do
 
 - Does not make judgment calls. "Are we ready to graduate to Stage 2?" is a human decision; the tool surfaces the question, never answers it.
-- Does not replace `/dev`, `/prd`, `/sprint-close`, or other method commands. It tells you which one to run.
+- Does not replace `/dev-test`, `/dev-impl`, `/prd`, `/sprint-close`, `/gap`, or other method commands. It tells you which one to run.
 - Does not modify the repo. Safe to run anytime.
 
 ## Installing
@@ -85,6 +85,8 @@ Exit codes:
 | Every task in active sprint has a `Satisfies:` line | P0 | `/reconcile` will fail without it |
 | Active sprint has PRD.md and TASKS.md | P0 | Sprint infrastructure required |
 | Retro written for active sprint (non-first) | P2 | Per-sprint retro expected |
+| Open `/incident` post-mortems (unresolved or unreviewed) | P1 | Learning-loop flag; closed by `Resolved:` + reviewed post-mortem |
+| Gap analysis missing or stale | P1 | `docs/<INITIATIVE>_GAP_ANALYSIS.md` missing or older than the newest sprint `.lock`; run `/gap` before `/sprint-close` |
 | Tests modified in recent commits | P1 | Possible "tests modified to match code" anti-pattern |
 | Failures log under ~100 entries | P2 | Memory pruning discipline |
 

@@ -12,13 +12,15 @@ The `/reconcile` script parses this file. Format must be preserved:
 - The `Satisfies:` subline lists requirement IDs separated by commas or spaces.
 - The `Files:` subline lists paths the task touches, comma-separated.
 
-**Optional `Autonomy:` annotation.** Each task may declare how much human checkpointing `/dev` should do while executing it. Valid values:
+> **`Files:` is load-bearing, not advisory.** `sprint_gate.py` runs as a PreToolUse hook in `/dev-impl` and structurally blocks `Edit`/`Write` calls against any path not on the active task's `Files:` allowlist. A vague or incomplete `Files:` line translates directly into refused writes during implementation. List every file the task is expected to touch; if a refactor reveals a file you missed, close the `/dev-impl` session, amend `Files:` here, and restart — that's the seam where scope expansion becomes visible. Empty `Files:` is acceptable only for research-style tasks that produce no code.
+
+**Optional `Autonomy:` annotation.** Each task may declare how much human checkpointing `/dev-impl` should do while executing it. Valid values:
 
 - `direct` — Claude proceeds task end-to-end; reviewer sees the diff. Use for low-risk, well-tested, easily reversible work (refactors with strong test coverage, doc updates, isolated utility additions).
 - `checkpoint` — Claude pauses at intermediate milestones for confirmation. The default. Use for ordinary feature work.
 - `review-only` — every step requires explicit human go-ahead before continuing. Use for high-risk changes: security boundaries, payment paths, schema migrations, anything touching production data.
 
-Tie the level to actual risk and test coverage, not to how much you trust the engineer or the model. A task with thin Category D fallthrough coverage on production-touching code is `review-only` even if the diff looks small. `reconcile.py` parses `Autonomy:` and warns on unknown values; `/dev` (when scripted) reads it to tune confirmation cadence.
+Tie the level to actual risk and test coverage, not to how much you trust the engineer or the model. A task with thin Category D fallthrough coverage on production-touching code is `review-only` even if the diff looks small. `reconcile.py` parses `Autonomy:` and warns on unknown values; `/dev-impl` reads it to tune confirmation cadence during implementation.
 
 ---
 

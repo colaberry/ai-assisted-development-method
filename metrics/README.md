@@ -57,7 +57,15 @@ python3 scripts/metrics.py list-events --event-type session --sprint v3
 
 ## Persistence — important caveat
 
-Events written from CI on a PR branch are lost on squash merge (PR branches are ephemeral). The `Logged gate ...` line still appears in the Actions run log — you have visibility, just not aggregation across PRs. A future follow-up adds a commit-back pattern from CI on merged PRs; until then, the highest-value events to capture are the ones engineers log locally: `/gap` runs, `/sprint-close` outcomes, session events, and any gate run on `main` directly.
+`scripts/metrics.py` writes one JSONL line per event to `metrics/events.jsonl` in whatever working tree it runs in. That file is the only persistence layer — there's no database, no remote sink, no aggregation service.
+
+What that means in practice:
+
+- **Local runs persist.** When an engineer runs `python3 scripts/metrics.py log-session ...` locally, the line lands in the working tree's `metrics/events.jsonl`. Commit the file (or commit it as part of `/sprint-close`) to keep the record on `main`.
+- **CI runs on PR branches are ephemeral.** Events written from CI on a feature branch live in that branch's checkout and are lost when the PR squash-merges. The `Logged gate ...` line still appears in the Actions run log — you have run-level visibility, just not aggregation across PRs.
+- **`main`-branch CI runs persist** if your workflow commits the file back. AADM's template workflows leave that wiring as a follow-up; until then, the highest-value events to capture are the ones engineers log locally: `/gap` runs, `/sprint-close` outcomes, session events, and any gate run on `main` directly.
+
+`sprint_close.py`'s `sessions_logged` check reads `metrics/events.jsonl` directly — if the file is missing or empty for the active sprint, the close refuses with a "no session events logged for vN" message. That's the structural backstop for the discipline.
 
 ## Honest caveats
 
