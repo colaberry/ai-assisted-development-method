@@ -47,37 +47,41 @@ If you want to adopt AADM on an existing project but can't take a full-bundle bo
 ## The enforcement pipeline
 
 ```mermaid
-flowchart LR
-    SOW["Contract<br/>docs/contract/SOW.md<br/>(SOW-§X.Y IDs)"] -->|"Satisfies:"| Design
-    Intake["Phase 0 intake<br/>docs/intake/*.md<br/>(Section 7.5 completeness pass)"] -->|"feeds"| Design
+flowchart TD
+    Intake["Phase 0 intake<br/>docs/intake/*.md"]
+    SOW["Contract SOW<br/>docs/contract/SOW.md"]
+    Design["Design doc<br/>docs/INITIATIVE.md"]
 
-    Design["Design doc<br/>docs/INITIATIVE.md<br/>(stable IDs)"] -->|"Satisfies:"| PRD
-    Design -->|"audited by"| Gap
+    Intake -->|feeds| Design
+    SOW -->|Satisfies:| Design
 
-    Gap{{"/gap<br/>(gap.py + skill)<br/>orphan + completeness audit"}}
-    Gap -.->|"orphans \u2192 amend / defer"| Design
+    Design -->|Satisfies:| PRD
+    Design -->|audited by| Gap
+    Gap{{"/gap<br/>orphan + completeness audit"}}
+    Gap -.->|orphans → amend / defer| Design
 
-    PRD["/prd vN<br/>sprints/vN/PRD.md<br/>+ TASKS.md (Files: allowlist)"]
-    PRD --> Test["/dev-test<br/>(session 1)<br/>writes failing matrix<br/>+ commits<br/>+ marker file"]
-    Test --> Impl["/dev-impl<br/>(session 2)<br/>dev_session.py check-impl-ready<br/>refuses without marker"]
+    PRD["/prd vN<br/>PRD.md + TASKS.md<br/>(Files: allowlist)"]
+    Test["/dev-test (session 1)<br/>failing matrix + marker"]
+    Impl["/dev-impl (session 2)<br/>refuses without marker"]
+    Hook["sprint_gate.py<br/>PreToolUse hook"]
+
+    PRD --> Test
+    Test --> Impl
+    Hook -.->|blocks writes outside<br/>Files: allowlist| Impl
 
     Impl --> PR["Open PR"]
-
-    Hook["sprint_gate.py<br/>PreToolUse hook"] -.->|"blocks writes outside Files: allowlist<br/>or under future sprint"| Impl
-
     PR --> GR{{"reconcile.py --ci"}}
-    PR --> GS{{"security.yml<br/>(Semgrep)"}}
-    GR -->|"pass"| Close
-    GS -->|"pass"| Close
-    GR -.->|"fail"| Block["Merge blocked"]
-    GS -.->|"fail"| Block
+    PR --> GS{{"security.yml (Semgrep)"}}
+    GR -.->|fail| Block["Merge blocked"]
+    GS -.->|fail| Block
+    GR -->|pass| Close
+    GS -->|pass| Close
 
-    Close["/sprint-close<br/>- reconcile --ci<br/>- /gap orphan check<br/>- /retro, /walkthrough<br/>- /security-review if in scope<br/>- /ui-qa if in scope<br/>- check_sessions_logged"]
+    Close["/sprint-close<br/>reconcile · /gap · retro · walkthrough<br/>· sec / ui-qa · sessions_logged"]
     Close --> Lock{{"sprint_close.py<br/>writes .lock"}}
-    Lock -->|"locked"| NextPRD["/prd vN+1<br/>(unblocked)"]
-    Lock -.->|"any check fails"| Refuse["Refuses; no .lock written"]
-
-    Hook -.->|"blocks Edit/Write under<br/>sprints/vN+1 until .lock"| NextPRD
+    Lock -.->|any check fails| Refuse["Refuses; no .lock"]
+    Lock -->|locked| NextPRD["/prd vN+1 (unblocked)"]
+    Hook -.->|blocks writes under<br/>sprints/vN+1 until .lock| NextPRD
 
     style GR fill:#1e3a8a,color:#fff
     style GS fill:#1e3a8a,color:#fff
@@ -91,7 +95,7 @@ flowchart LR
     style Impl fill:#064e3b,color:#fff
 ```
 
-**Blue** = structural gate (non-skippable). **Red** = refusal path. **Green** = ceremony. Every box maps to a script or a skill in [tooling/](tooling/).
+**Blue** = structural gate (non-skippable). **Red** = refusal path. **Green** = ceremony. Every box maps to a script or a skill in [tooling/](tooling/). The intake's Section 7.5 completeness pass and the design doc's stable §X.Y / Dn / Qn / SOW-§X.Y IDs are the traceability anchors that flow through `Satisfies:` lines on every downstream task.
 
 **The typical sprint, at the engineer's eye level:**
 
