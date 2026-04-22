@@ -423,15 +423,15 @@ State-check runs anytime and doesn't modify the repo. It can tell you "the sprin
 
 ### vs. `/gap`
 
-`/gap` is an end-of-initiative audit that runs three parallel agents against the design doc. It's expensive (multi-agent, LLM-driven, minutes to run).
+`/gap` is an initiative-boundary audit that diffs requirement IDs in `docs/<INITIATIVE>.md` against the union of `Satisfies:` citations across every sprint and emits `docs/<INITIATIVE>_GAP_ANALYSIS.md`.
 
-State-check is not `/gap`. It doesn't audit against the design doc; it checks whether state artifacts are present and consistent. If you need to know "did we actually build everything we said in the design doc?", run `/gap`. If you need to know "what should I do in the next hour?", run state-check.
+State-check is not `/gap`. It doesn't audit against the design doc; it checks whether state artifacts are present and consistent. But state-check **does** track the gap analysis as an artifact: the `gap_analysis_staleness` P1 flag fires when `docs/<INITIATIVE>_GAP_ANALYSIS.md` is missing or older than the newest sprint `.lock`. That's how state-check surfaces "the analysis exists but no longer reflects the current sprint state" without re-running `/gap` itself.
 
-**Relationship:** They're complementary. State-check for daily orientation; `/gap` for initiative-level verification.
+**Relationship:** They're complementary. State-check observes that the gap analysis is fresh; `/gap` is the skill that produces and refreshes it. `/sprint-close` reads the analysis to refuse the lock when orphaned requirements remain.
 
 ### vs. CLAUDE.md and the failures log
 
-CLAUDE.md and the failures log are the memory layer. They're consulted at the start of each `/dev` session and during ambiguity passes.
+CLAUDE.md and the failures log are the memory layer. They're consulted at the start of each `/dev-test` session (and inherited into `/dev-impl` via the committed tests) and during ambiguity passes.
 
 State-check reads both but doesn't update them. It flags if CLAUDE.md is bloated or the failures log is unpruned, but it doesn't rewrite either.
 

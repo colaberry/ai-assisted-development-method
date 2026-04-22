@@ -24,20 +24,36 @@ This bundle contains everything needed to adopt AADM on a new or existing client
 │   │   └── state-check.py                     # Repo state detector CLI (tested, works)
 │   └── .claude/skills/
 │       └── state-check.md                     # Claude Code conversational skill
+├── metrics/
+│   ├── scripts/metrics.py                     # Gate + session event logger
+│   └── docs/METRICS.md                        # Event schema and usage
 └── tooling/
     ├── README.md                              # Tooling-specific setup guide
     ├── scripts/
-    │   └── reconcile.py                       # Sprint coverage check (tested, works)
+    │   ├── reconcile.py                       # Sprint coverage check (CI merge gate)
+    │   ├── gap.py                             # Initiative-boundary coverage check
+    │   ├── sprint_close.py                    # Atomic sprint closure (writes .lock)
+    │   └── dev_session.py                     # Marker enforcement for /dev-test → /dev-impl
+    ├── hooks/
+    │   └── sprint_gate.py                     # PreToolUse hook: anti-skip + Files: allowlist
     ├── .github/workflows/
-    │   └── reconcile.yml                      # CI merge gate
+    │   ├── reconcile.yml                      # CI merge gate (traceability)
+    │   └── security.yml                       # CI merge gate (Semgrep)
+    ├── .claude/skills/                        # Conversational skills (/prd, /dev-test, /dev-impl, /gap, /sprint-close, /security-review, /ui-qa, /incident, /gate-1-to-2, /gate-2-to-3)
     └── templates/
-        ├── client-intake-TEMPLATE.md          # Phase 0 intake — capture requirements from vague client input
+        ├── client-intake-TEMPLATE.md          # Phase 0 intake (Section 7.5 = completeness pass)
         ├── CLAUDE.md                          # Per-client persistent context
+        ├── sprint-PRD-TEMPLATE.md             # Sprint planning document
+        ├── sprint-TASKS-TEMPLATE.md           # Task list (Files: entries are the hook allowlist)
+        ├── retro-TEMPLATE.md                  # Per-sprint retrospective
         ├── failures-log-README.md             # Folder README for docs/failures/
         ├── failures-log-TEMPLATE.md           # Single failures-log entry template
-        ├── retro-TEMPLATE.md                  # Per-sprint retrospective
-        ├── sprint-PRD-TEMPLATE.md             # Sprint planning document
-        └── sprint-TASKS-TEMPLATE.md           # Task list (format /reconcile parses)
+        ├── incident-TEMPLATE.md               # Post-mortem template
+        ├── security-review-TEMPLATE.md        # /security-review artifact
+        ├── ui-qa-TEMPLATE.md                  # /ui-qa artifact
+        ├── security-suppressions-TEMPLATE.md  # Semgrep suppression ledger
+        ├── code-review-AI-CHECKLIST.md        # Attach to AI-assisted PRs
+        └── claude-settings-hooks-TEMPLATE.json # Merge into client repo .claude/settings.json
 ```
 
 ## Reading order
@@ -90,20 +106,23 @@ A structured process for shipping enterprise-grade software to external clients 
 
 The method operates at two levels:
 
-- **Initiative level** — a multi-sprint effort to ship a design document. Preceded by **Phase 0** (discovery and design-doc authoring) when the client hasn't provided a complete spec. Gated by `/gap` at the end.
-- **Sprint level** — one sprint of an initiative. Gated by `/sprint-close` before the next sprint can start.
+- **Initiative level** — a multi-sprint effort to ship a design document. Preceded by **Phase 0** (discovery and design-doc authoring; intake template Section 7.5 walks an enumeration checklist so requirements aren't silently dropped before they can get an ID) when the client hasn't provided a complete spec. Audited by `/gap` (script + skill); `/sprint-close` refuses to lock when orphaned requirements remain.
+- **Sprint level** — one sprint of an initiative. Each task runs in two Claude Code sessions: `/dev-test` writes the failing matrix and commits, then a **new session** runs `/dev-impl` (which refuses to start until `dev_session.py` verifies the test commit). Gated by `/sprint-close` before the next sprint can start.
 
-Requirements have stable IDs (§X.Y, Dn, Qn, SOW-§X.Y) that propagate from the contract through the design doc, sprint PRDs, and tasks to code. The `/reconcile` script enforces traceability in CI.
+Requirements have stable IDs (§X.Y, Dn, Qn, SOW-§X.Y) that propagate from the contract through the design doc, sprint PRDs, and tasks to code. The `/reconcile` script enforces traceability in CI; the `sprint_gate.py` PreToolUse hook enforces the per-task `Files:` allowlist.
 
 ## What problem this solves
 
 - **PRD → gap analysis → new PRD → gap analysis loops.** Solved by stable requirement IDs plus CI-enforced coverage.
-- **Client gave us a vague problem statement, not a spec.** Phase 0 with the intake template turns vague input into signed-off requirements before sprint work begins.
-- **Sprint-skipping across multi-sprint initiatives.** Solved by `/sprint-close` as a structural gate.
-- **Silent descoping.** Solved by the `[DEFERRED]` discipline in tasks.
+- **Client gave us a vague problem statement, not a spec.** Phase 0 with the intake template (Section 7.5 enumeration discipline) turns vague input into signed-off requirements before sprint work begins.
+- **Silent requirement drop across an initiative.** A requirement in the design doc that never makes it into any sprint. Solved by `/gap` (script + skill) plus `sprint_close.py` refusal-on-orphans plus a `state-check.py` P1 flag for stale analyses.
+- **Sprint-skipping.** Solved by `/sprint-close` writing the `.lock` and `sprint_gate.py` PreToolUse hook blocking writes under `sprints/v(N+1)/` until v(N) is locked.
+- **Silent scope expansion.** Implementation drifting past declared scope. Solved by `sprint_gate.py` enforcing a `Files:` allowlist parsed from the active TASKS.md.
+- **Test-after-the-fact masquerading as TDD.** Solved by splitting `/dev` into `/dev-test` (writes failing matrix, commits) and `/dev-impl` (separate session; refuses to start until `dev_session.py` verifies the test commit).
+- **Silent descoping.** Solved by `[DEFERRED]` discipline (target sprint + reason required).
 - **LLM-written tests that look thorough but don't catch real bugs.** Solved by the test matrix (categories D and E specifically) plus periodic mutation testing.
 - **Client delivery surprises.** Solved by client-facing artifacts that are projections of internal artifacts, never written independently.
-- **Repeating the same class of bug.** Solved by the failures log feeding forward into new design docs.
+- **Repeating the same class of bug.** Solved by the failures log feeding forward into new design docs and the `/incident` skill naming an enforcement surface for every prevention rule.
 
 ## Getting started
 
@@ -189,12 +208,15 @@ If you're using Phase 0, steps 3 and 4 are outputs of Phase 0 — you don't do t
 
 Follow the method's Sprint Level section:
 
-1. `/prd` — scope the sprint from the design doc. Every task gets a `Satisfies:` line.
-2. `/dev` — one task per session, test matrix first (categories A–E), separate sessions for tests and implementation.
-3. `/reconcile` — runs in CI on every PR. Blocks merges when requirements aren't covered.
-4. `/sprint-close` — runs `/reconcile`, `/walkthrough`, `/retro`, and writes the lockfile.
+1. `/prd` — scope the sprint from the design doc. Every task gets a `Satisfies:` line and a `Files:` allowlist (the hook enforces it). The skill walks a scoped completeness pass before slicing tasks.
+2. **For each task, two Claude Code sessions:**
+   - `/dev-test` — writes the failing test matrix (categories A–E per `Tests required:`), commits, drops the `dev_session.py` marker.
+   - **Open a new Claude Code session.** `/dev-impl` — runs `dev_session.py check-impl-ready` first, refuses without the marker, implements until the matrix passes.
+3. `/reconcile` — runs in CI on every PR. Blocks merges when requirements aren't covered. `security.yml` runs Semgrep alongside it.
+4. `/gap` — between sprints, before `/sprint-close`. Runs `gap.py`, walks orphans interactively, performs the upstream-completeness pass against intake §7.5, commits `docs/<INITIATIVE>_GAP_ANALYSIS.md`.
+5. `/sprint-close` — wraps `sprint_close.py`. Runs reconcile again, refuses on `/gap` orphans, validates RETRO.md isn't a template stub, requires `/security-review` and `/ui-qa` artifacts when the PRD flagged them, refuses on zero session events when `metrics/` is installed, then writes `sprints/vN/.lock`.
 
-`/sprint-close` and `/walkthrough` are manual checklists for now; automate them after you've used them for a few sprints.
+`/walkthrough` is the only step still primarily a manual ceremony. Everything else above is scripted with structural refusal modes.
 
 ### Step 6: Watch for the common skips
 
@@ -204,26 +226,28 @@ From honest prediction: these will happen in your first initiative.
 2. The test matrix D (fallthrough) gets skipped on a "small" task. It won't feel necessary until something breaks.
 3. The ambiguity pass produces questions, they get answered in Slack, nobody updates the design doc. Check whether the doc actually got edited.
 4. The failures log accumulates entries faster than prevention rules. Each entry needs a rule, or the log becomes a graveyard.
-5. **New:** Phase 0 gets rushed. Intake has `[REQUIRED]` fields marked "TBD" and the design doc gets written against the gaps. Enforce the handoff-readiness checklist in Section 13 of the intake template.
+5. Phase 0 gets rushed. Intake has `[REQUIRED]` fields marked "TBD" and the design doc gets written against the gaps. Enforce the Section 13 handoff-readiness checklist — and specifically the Section 7.5 completeness pass, which forces an explicit "N/A because X" per category rather than silent drop.
 
 ## Version notes
 
 - **Method:** v3.2.1 — adds Phase 0 and the client intake template to v3.2. If you were already planning to use v3.2, v3.2.1 is a drop-in replacement.
-- **Tooling:** day-one essentials plus the intake template. `/reconcile` is a tested working script; `/sprint-close`, `/gap`, `/security-review`, and `/ui-qa` are manual checklists until your team has used the basics for a while.
+- **Tooling:** the structural enforcement points are all scripted now — `reconcile.py`, `gap.py`, `sprint_close.py`, `sprint_gate.py` (PreToolUse hook), `security.yml` (Semgrep), `dev_session.py` (test/impl session split), and the `/security-review` + `/ui-qa` skills with structural refusal in `sprint_close.py`. See [CHANGELOG.md](CHANGELOG.md) for what shipped in each release.
 
-## What this bundle deliberately does NOT include
+## What this bundle deliberately does NOT include yet
 
-- **`/sprint-close`, `/walkthrough`, `/gap`, `/security-review`, `/ui-qa` automation scripts.** Higher-leverage to build once the manual versions have stabilized.
 - **Mutation testing setup.** Language-specific; add when you pick critical modules.
+- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)). Structural pieces shipped (logging, refusal-on-zero); threshold ranges deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging.
+- **Multi-hop `SUPERSEDED-BY:` chains in `/gap`** ([#29](https://github.com/colaberry/ai-assisted-development-method/issues/29)) — v1 handles single-hop only.
+- **`/walkthrough` script** — the manual ceremony works fine and there's no failure-mode evidence yet that demands a script.
 
 ## Quick reference — the 15 rules
 
 From the method document:
 
-1. One sprint at a time per initiative stream.
-2. One task at a time per `/dev` session.
+1. One sprint at a time per initiative stream. (Enforced by `sprint_gate.py` + `.lock`.)
+2. One task at a time per `/dev-test` or `/dev-impl` session.
 3. Never skip the test matrix. Categories D and E matter most when they feel least necessary.
-4. Test writing and implementation are in separate Claude Code sessions.
+4. Test writing and implementation are in separate Claude Code sessions. (Enforced by `dev_session.py` marker verification.)
 5. Never accept "it should work" without running it.
 6. When Claude Code gets stuck in a loop, stop and re-specify.
 7. Keep CLAUDE.md, decision records, and the failures log current.

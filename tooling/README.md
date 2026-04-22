@@ -3,23 +3,38 @@
 This bundle contains the minimum tooling to start using the method on a new client repo:
 
 - A working `/reconcile` script (Python, stdlib only)
-- A `sprint_close.py` script that atomically closes a sprint after running `/reconcile` and verifying RETRO + sign-off
-- A GitHub Actions workflow that runs `/reconcile` as a CI merge gate
-- Templates for CLAUDE.md, the failures log, retrospectives, and sprint artifacts
+- A `sprint_close.py` script that atomically closes a sprint after running `/reconcile`, verifying RETRO + sign-off, checking the security/UI-QA artifacts, and confirming session events were logged
+- A `gap.py` script that diffs design-doc requirement IDs against sprint `Satisfies:` citations and writes `docs/<INITIATIVE>_GAP_ANALYSIS.md`
+- A `dev_session.py` script that records `/dev-test`/`/dev-impl` markers so the test-writer and implementation author cannot share a Claude Code session
+- A `sprint_gate.py` PreToolUse hook that blocks writes outside the active sprint and outside the active task's `Files:` allowlist
+- GitHub Actions workflows for `/reconcile` and `/security` as CI merge gates
+- Templates for CLAUDE.md, the failures log, retrospectives, sprint artifacts, the client intake (with the §7.5 elicitation completeness pass), security/UI-QA reviews, and incident post-mortems
 
 ## Contents
 
 ```
 scripts/
 ├── reconcile.py                    # Sprint coverage check
-└── sprint_close.py                 # Atomic sprint closure (writes .lock)
+├── sprint_close.py                 # Atomic sprint closure (writes .lock)
+├── gap.py                          # Initiative-boundary orphan/conflict detection
+└── dev_session.py                  # /dev-test → /dev-impl marker verification
+hooks/
+└── sprint_gate.py                  # PreToolUse hook: sprint-lock + Files: allowlist
 .github/workflows/
-└── reconcile.yml                   # CI integration
+├── reconcile.yml                   # CI integration for /reconcile
+└── security.yml                    # CI integration for Semgrep
 templates/
 ├── CLAUDE.md                       # Per-client persistent context
+├── client-intake-TEMPLATE.md       # Phase 0 intake (incl. §7.5 completeness pass)
+├── claude-settings-hooks-TEMPLATE.json  # Hooks block to merge into .claude/settings.json
 ├── failures-log-README.md          # Folder-level README for docs/failures/
 ├── failures-log-TEMPLATE.md        # Single entry template
+├── incident-TEMPLATE.md            # Post-mortem template
 ├── retro-TEMPLATE.md               # Per-sprint retrospective
+├── security-review-TEMPLATE.md     # Manual security review artifact
+├── security-suppressions-TEMPLATE.md
+├── ui-qa-TEMPLATE.md               # UI quality artifact
+├── code-review-AI-CHECKLIST.md     # AI-assisted PR review checklist
 ├── sprint-PRD-TEMPLATE.md          # Sprint planning document
 └── sprint-TASKS-TEMPLATE.md        # Task list in the format /reconcile parses
 ```
@@ -117,7 +132,10 @@ When you're ready to close a sprint, this is the one entry point. It:
 2. Runs `reconcile.py --ci` against the sprint. Pass `--strict-symbols` to also fail on empty stubs.
 3. Verifies `RETRO.md` is no longer the template (no `<placeholder>`, no literal `vN`, no literal `YYYY-MM-DD`, and the "What went well" / "What went poorly" sections contain real content).
 4. Verifies sign-off — either an existing `SIGNOFF.md` containing `Reviewer: <name>` and `Date: YYYY-MM-DD`, or `--reviewer NAME` to create one.
-5. Writes `sprints/vN/.lock` only if every check above passed. The `.lock` file records `locked_at`, `reviewer`, and `reconcile_status` — downstream tooling (the planned PreToolUse hook) reads this to know the sprint is closed.
+5. **Verifies the security and UI-QA artifacts** named by the PRD's scope flags. If `/security-review required: Yes`, `sprints/vN/SECURITY-REVIEW.md` must exist with a non-blocked `Decision:` line; same for `/ui-qa required: Yes` and `UI-QA.md`. Either missing or `Decision: blocked` refuses the lock.
+6. **Verifies session events were logged** for the sprint when the `metrics/` module is installed. `sprint_close.py` reads `metrics/events.jsonl` and refuses to lock with "no session events logged for vN" if no `session` events name the active sprint. Repos on the minimum-viable adoption path (no `metrics/` module) get a "not installed" pass on this check — the refusal only fires for teams that opted into metrics.
+7. **Verifies the initiative-level gap analysis is current** when `docs/<INITIATIVE>_GAP_ANALYSIS.md` is present. Orphaned requirements in the analysis refuse the lock; run `/gap` to clear them or document the resolution before retrying.
+8. Writes `sprints/vN/.lock` only if every check above passed. The `.lock` file records `locked_at`, `reviewer`, and `reconcile_status` — `sprint_gate.py` reads this on every PreToolUse to decide whether writes into vN+1 are allowed.
 
 ```bash
 # Close v3 with the reviewer recorded inline
@@ -166,7 +184,7 @@ chmod +x .claude/hooks/sprint_gate.py
 
 Intentionally out of scope for day-one tooling:
 
-- **`/walkthrough`, `/gap`, `/security-review`, `/ui-qa` automation.** These are higher-leverage to build later once the team has used the basic pieces and knows what shape each one needs. Start with manual checklists invoked as Claude Code slash commands; promote to scripts when the manual process stabilizes. (Sprint close itself is now scripted via `sprint_close.py`; security is gated structurally via `security.yml`.)
+- **`/walkthrough` automation.** Still a manual checklist invoked as a Claude Code slash command; promote to a script when the manual process stabilizes. (`/gap` is scripted via `gap.py`; `/sprint-close` via `sprint_close.py`; `/security-review` and `/ui-qa` ship as templates with `sprint_close.py` enforcement on the artifacts.)
 - **Mutation testing setup.** Language-specific; set up with Stryker / mutmut / PIT when you pick the critical modules.
 - **`docs/patterns/` folder for positives.** Per v3.2 guidance, do not pre-emptively add this until you have a clear signal the team needs it.
 

@@ -78,13 +78,31 @@ Refuse to proceed if:
    pass) that *never made it into the design doc* with a stable ID? This
    is the harder failure mode — `gap.py` can only audit what's already a
    §X.Y; it can't audit what was silently dropped between intake and
-   design. For every Section 7.5 category that captured a real
-   requirement, confirm a stable ID exists in the design doc. For every
-   category marked "N/A because X," confirm the reason is reflected in
-   the design doc's Assumptions section. If any are missing, document
-   them in the analysis's "Notes" section as candidates for a design-doc
-   amendment PR. Do not invent IDs in `/gap` — the amendment is a
-   separate review against the design document.
+   design.
+
+   **How to do the check, concretely.** Open the most recent
+   `docs/intake/<CLIENT>-<DATE>.md`. Walk Section 7.5 row by row — the 13
+   categories are functional, non-functional/quality, security/privacy,
+   observability, failure modes, data, operations/runbook,
+   compliance/regulatory, accessibility, internationalization,
+   documentation, training/enablement, decommissioning. For each row:
+   - If the row captured a concrete requirement (not "N/A"), grep
+     `docs/<INITIATIVE>.md` for evidence: a §X.Y heading whose prose
+     covers it, a Dn decision, or a Qn answered question. If you can't
+     find a stable ID covering the substance, that's a missing-ID
+     candidate. List it in the analysis's "Notes" section under a
+     "Section 7.5 → design-doc gaps" subsection, naming the intake row
+     and the substantive requirement that didn't make it across.
+   - If the row was marked "N/A because X", confirm that the same
+     reasoning appears in the design doc's Assumptions section (or an
+     equivalent "out of scope" callout). If the assumption is silent in
+     the design doc, list it in the same "Notes" subsection — silent
+     N/A across the boundary is the same failure mode as silent drop,
+     just at a different layer.
+
+   Do not invent IDs in `/gap` — the amendment is a separate review
+   against the design document. The Notes section is the structured
+   handoff to whoever runs that amendment PR.
 6. **Re-runs the script in `--ci` mode to confirm.**
    ```bash
    python3 tooling/scripts/gap.py docs/<INITIATIVE>.md sprints/ --ci

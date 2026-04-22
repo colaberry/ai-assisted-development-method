@@ -134,7 +134,7 @@ Before any work begins, the repository must have the following. If these are mis
 | **docs/failures/ folder** | One entry per significant bug or `/gap` finding. Records root cause, which phase should have caught it, and prevention rule. |
 | **docs/client-facing/ folder** | Client-facing variants of `/gap` reports and delivery walkthroughs. Same data, no internal jargon. Produced at delivery milestones. |
 | **sprints/ directory layout** | `sprints/vN/PRD.md`, `TASKS.md`, `WALKTHROUGH.md`, `RETRO.md`. Sprint has a lockfile indicating closure. |
-| **Skills installed** | `/prd`, `/dev`, `/reconcile`, `/sprint-close`, `/walkthrough`, `/retro`, `/security-review`, `/ui-qa`, `/gap` — or manual checklists if not yet automated. `/reconcile` wired as a CI check. |
+| **Skills installed** | `/prd`, `/dev-test`, `/dev-impl`, `/reconcile`, `/sprint-close`, `/walkthrough`, `/retro`, `/security-review`, `/ui-qa`, `/gap`, `/state-check` — or manual checklists if not yet automated. `/reconcile` wired as a CI check. `/dev-test` and `/dev-impl` run in separate sessions; the split is enforced by `dev_session.py` marker verification so the test-writer and implementation author cannot share a context window. |
 
 ---
 
@@ -173,13 +173,17 @@ The diagram below shows the full cycle. The key structural insight: the method o
 │     Output: sprints/vN/PRD.md + TASKS.md (with Deferred section)         │
 │                                    │                                     │
 │                                    ▼                                     │
-│   /dev — one task at a time                                              │
+│   /dev-test — one task, test-writing session                             │
 │     Step 1: Re-read PRD, announce Satisfies: IDs                         │
 │     Step 2: Ambiguity pass on the task (if still underspecified)         │
 │     Step 2.5: Test matrix A (happy) + B (edge) + C (error)               │
 │                + D (fallthrough) + E (architecture guards)               │
-│     Step 3: Senior-reviewed failing tests committed                      │
+│     Step 3: Senior-reviewed failing tests committed; drops marker        │
+│   /dev-impl — one task, implementation session (new context)             │
 │     Step 4: Implementation — full automated suite in loop                │
+│     Session split enforced by dev_session.py marker verification.        │
+│     Files: allowlist in TASKS.md is load-bearing — sprint_gate.py        │
+│     blocks writes outside the active task's allowlist.                   │
 │                                    │                                     │
 │                                    ▼                                     │
 │   /reconcile — coverage check (mid-sprint or pre-close)                  │
@@ -558,7 +562,7 @@ Small teams often have people wearing multiple hats. This section is descriptive
 
 **Key handoff observations:**
 
-- **PMs own the client-interface parts** (SOW, design-doc framing, client-facing variants) and **do not own the engineering internals** (`/dev`, `/reconcile`, `/security-review`, mutation testing). PMs do not need to run these; they need to know they exist and trust the output.
+- **PMs own the client-interface parts** (SOW, design-doc framing, client-facing variants) and **do not own the engineering internals** (`/dev-test`, `/dev-impl`, `/reconcile`, `/security-review`, mutation testing). PMs do not need to run these; they need to know they exist and trust the output.
 - **Tech leads own the sprint boundaries** (`/prd`, `/sprint-close`) because those are the gates that protect delivery commitments.
 - **Engineers own the tasks and tests** and should push back if `/prd` decomposition gives them tasks without clear `Satisfies:` lines or acceptance criteria.
 - **The whole team owns retros and the failures log.** These are the compounding memory layer; an engineer's insight that doesn't make it into the log is lost.
@@ -571,11 +575,11 @@ If the team is very small (say, three engineers with one acting as tech lead), o
 
 1. **One sprint at a time per initiative stream.** Concurrent sprints on the same initiative produce merge chaos and break `/reconcile`. Parallel initiatives are fine if they touch different code.
 
-2. **One task at a time per `/dev` session.** Batching tasks in one session pollutes context and degrades test discipline. Start a fresh session per task.
+2. **One task at a time per `/dev-test` or `/dev-impl` session.** Batching tasks in one session pollutes context and degrades test discipline. Start a fresh session per task. Enforced by `dev_session.py` marker verification — the hook refuses to start a second task in the same session.
 
 3. **Never skip the test matrix.** Categories D and E are the ones teams skip and the ones that catch real drift. If time pressure prompts you to skip them, that is exactly when they are most needed.
 
-4. **Test writing and implementation must be in separate sessions.** Single-context TDD with an LLM tends to produce implementation-first code disguised as test-first.
+4. **Test writing and implementation must be in separate sessions.** Single-context TDD with an LLM tends to produce implementation-first code disguised as test-first. Enforced by `dev_session.py`: `/dev-test` drops a marker once failing tests are committed; `/dev-impl` refuses to start until that marker exists and runs in a fresh session.
 
 5. **Never accept "it should work" without running it.** If a task finishes without the full automated suite passing, it is not finished.
 

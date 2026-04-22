@@ -10,17 +10,20 @@ Automate what you would otherwise ask reviewers to check, and make skipping step
 
 The method operates at two levels:
 
-- **Initiative level** — a multi-sprint effort to ship a design document. Preceded by **Phase 0** (discovery and design-doc authoring) when the client hasn't handed you a complete spec. Gated by `/gap` at the end.
-- **Sprint level** — one sprint of an initiative. Gated by `/sprint-close` before the next sprint can start.
+- **Initiative level** — a multi-sprint effort to ship a design document. Preceded by **Phase 0** (discovery and design-doc authoring; see the [client intake template](tooling/templates/client-intake-TEMPLATE.md)) when the client hasn't handed you a complete spec. Audited by [`/gap`](tooling/.claude/skills/gap.md) between sprints; `/sprint-close` refuses to lock when orphaned requirements remain.
+- **Sprint level** — one sprint of an initiative. Each task runs in two Claude Code sessions (`/dev-test` then `/dev-impl`) with a marker file gating the handoff. Gated by [`/sprint-close`](tooling/.claude/skills/sprint-close.md) before the next sprint can start.
 
 ## What this solves
 
-- **PRD → gap analysis → new PRD loops.** Solved by stable requirement IDs plus CI-enforced coverage.
-- **Vague client input instead of a spec.** Phase 0 with the intake template turns vague input into signed-off requirements.
-- **Sprint-skipping across multi-sprint initiatives.** Solved by `/sprint-close` as a structural gate.
-- **Silent descoping.** Solved by the `[DEFERRED]` discipline in tasks.
+- **PRD → gap analysis → new PRD loops.** Solved by stable requirement IDs plus CI-enforced coverage (`reconcile.py`).
+- **Vague client input instead of a spec.** Phase 0 with the intake template (Section 7.5 enumeration discipline) turns vague input into signed-off requirements.
+- **Silent requirement drop across multi-sprint initiatives.** A requirement in the design doc that never makes it into any sprint. Solved by `/gap` (script + skill) plus `sprint_close.py` refusal-on-orphans plus a `state-check.py` P1 flag for stale analyses.
+- **Sprint-skipping.** Cannot start v(N+1) while v(N) is unlocked. Solved by `/sprint-close` writing the `.lock` and `sprint_gate.py` PreToolUse hook blocking writes.
+- **Silent scope expansion.** Implementation phases drifting past declared scope. Solved by `sprint_gate.py` enforcing a `Files:` allowlist parsed from the active TASKS.md.
+- **Test-after-the-fact masquerading as TDD.** Single-session "/dev that writes tests then implements" lets the model coerce tests to match code. Solved by splitting into `/dev-test` (writes failing matrix, commits) and `/dev-impl` (separate session; refuses to start until `dev_session.py` verifies the test commit on disk).
+- **Silent descoping.** Solved by `[DEFERRED]` discipline (target sprint + reason required).
 - **Tests that look thorough but miss real bugs.** Solved by the test matrix (categories D and E specifically) plus periodic mutation testing.
-- **Repeating the same class of bug.** Solved by the failures log feeding forward into new design docs.
+- **Repeating the same class of bug.** Solved by the failures log feeding forward into new design docs and the `/incident` skill naming an enforcement surface for every prevention rule.
 
 ## What's in this repo
 
@@ -45,13 +48,22 @@ If you want to adopt AADM on an existing project but can't take a full-bundle bo
 
 ```mermaid
 flowchart LR
+    SOW["Contract<br/>docs/contract/SOW.md<br/>(SOW-§X.Y IDs)"] -->|"Satisfies:"| Design
+    Intake["Phase 0 intake<br/>docs/intake/*.md<br/>(Section 7.5 completeness pass)"] -->|"feeds"| Design
+
     Design["Design doc<br/>docs/INITIATIVE.md<br/>(stable IDs)"] -->|"Satisfies:"| PRD
-    SOW["Contract<br/>docs/contract/SOW.md<br/>(SOW-#X.Y IDs)"] -->|"Satisfies:"| Design
+    Design -->|"audited by"| Gap
 
-    PRD["/prd vN<br/>sprints/vN/PRD.md<br/>+ TASKS.md"]
-    PRD --> Dev["/dev<br/>one task per session<br/>tests in separate session"]
+    Gap{{"/gap<br/>(gap.py + skill)<br/>orphan + completeness audit"}}
+    Gap -.->|"orphans \u2192 amend / defer"| Design
 
-    Dev --> PR["Open PR"]
+    PRD["/prd vN<br/>sprints/vN/PRD.md<br/>+ TASKS.md (Files: allowlist)"]
+    PRD --> Test["/dev-test<br/>(session 1)<br/>writes failing matrix<br/>+ commits<br/>+ marker file"]
+    Test --> Impl["/dev-impl<br/>(session 2)<br/>dev_session.py check-impl-ready<br/>refuses without marker"]
+
+    Impl --> PR["Open PR"]
+
+    Hook["sprint_gate.py<br/>PreToolUse hook"] -.->|"blocks writes outside Files: allowlist<br/>or under future sprint"| Impl
 
     PR --> GR{{"reconcile.py --ci"}}
     PR --> GS{{"security.yml<br/>(Semgrep)"}}
@@ -60,22 +72,33 @@ flowchart LR
     GR -.->|"fail"| Block["Merge blocked"]
     GS -.->|"fail"| Block
 
-    Close["/sprint-close<br/>- runs reconcile again<br/>- /retro, /walkthrough<br/>- /security-review if in scope<br/>- /ui-qa if in scope<br/>- check_sessions_logged"]
+    Close["/sprint-close<br/>- reconcile --ci<br/>- /gap orphan check<br/>- /retro, /walkthrough<br/>- /security-review if in scope<br/>- /ui-qa if in scope<br/>- check_sessions_logged"]
     Close --> Lock{{"sprint_close.py<br/>writes .lock"}}
     Lock -->|"locked"| NextPRD["/prd vN+1<br/>(unblocked)"]
     Lock -.->|"any check fails"| Refuse["Refuses; no .lock written"]
 
-    Hook["sprint_gate.py<br/>PreToolUse hook"] -.->|"blocks Edit/Write under<br/>sprints/vN+1 until .lock"| NextPRD
+    Hook -.->|"blocks Edit/Write under<br/>sprints/vN+1 until .lock"| NextPRD
 
     style GR fill:#1e3a8a,color:#fff
     style GS fill:#1e3a8a,color:#fff
     style Lock fill:#1e3a8a,color:#fff
+    style Gap fill:#1e3a8a,color:#fff
+    style Hook fill:#1e3a8a,color:#fff
     style Block fill:#7f1d1d,color:#fff
     style Refuse fill:#7f1d1d,color:#fff
     style Close fill:#064e3b,color:#fff
+    style Test fill:#064e3b,color:#fff
+    style Impl fill:#064e3b,color:#fff
 ```
 
-Blue = structural gate (non-skippable). Red = refusal path. Green = ceremony. Every box maps to a script or a skill in the tooling.
+**Blue** = structural gate (non-skippable). **Red** = refusal path. **Green** = ceremony. Every box maps to a script or a skill in [tooling/](tooling/).
+
+**The typical sprint, at the engineer's eye level:**
+
+1. `/prd` reads the design doc, scopes this sprint, writes `PRD.md` + `TASKS.md` (each task carries a `Files:` allowlist).
+2. For each task: `/dev-test` writes the failing test matrix, commits, drops a marker. **Open a new Claude Code session.** `/dev-impl` verifies the marker and implements until tests pass.
+3. PR opens. `reconcile.py --ci` (traceability) and `security.yml` (Semgrep) gate the merge.
+4. End of sprint: `/gap` audits initiative-level coverage. `/sprint-close` runs all the checks and writes `.lock`. The PreToolUse hook now permits writes under `sprints/v(N+1)/`.
 
 ## Reading order by role
 
@@ -85,23 +108,51 @@ Blue = structural gate (non-skippable). Red = refusal path. Green = ceremony. Ev
 
 ## Tooling
 
-- **[sprint_close.py](tooling/scripts/sprint_close.py)** — atomic sprint closure. Runs `reconcile.py --ci`, verifies `RETRO.md` is filled (no template markers, sections 1-2 have real content), verifies `SIGNOFF.md` exists with `Reviewer:` + `Date:` (or accepts `--reviewer NAME` to create one), then writes `sprints/vN/.lock` recording who closed the sprint and when. No partial closures. Python stdlib only.
-- **[reconcile.py](tooling/scripts/reconcile.py)** — sprint coverage check. Verifies every PRD requirement is satisfied by a completed task or marked `[DEFERRED]`, that listed `Files:` exist, and (new) that symbols extracted from each task's title and `Acceptance:` line actually appear in those files — closes the "empty stub passes reconcile" hole. `--strict-symbols` opts into hard-failing on stubs. Python stdlib only. Runs in CI via [reconcile.yml](tooling/.github/workflows/reconcile.yml) as a merge gate.
-- **[security.yml](tooling/.github/workflows/security.yml)** — Semgrep-based security merge gate. Blocks PRs on any ERROR-severity finding. Deliberate suppressions live in [docs/security/suppressions.md](tooling/templates/security-suppressions-TEMPLATE.md) with a 90-day re-review ceremony enforced by `state-check.py`.
-- **[sprint_gate.py](tooling/hooks/sprint_gate.py)** — Claude Code `PreToolUse` hook. Blocks `Write`/`Edit`/`MultiEdit`/`NotebookEdit` under `sprints/vK/` when any earlier `sprints/vJ/` (J < K) is missing a `.lock` file. The structural complement to `sprint_close.py`: `sprint_close.py` decides when `.lock` gets written, `sprint_gate.py` decides what the agent can touch based on whose `.lock` exists. Install via [claude-settings-hooks-TEMPLATE.json](tooling/templates/claude-settings-hooks-TEMPLATE.json).
-- **[state-check.py](state-check/scripts/state-check.py)** — detects current repo state (mode, stage, active sprint, flags). Heads-up display, not autopilot. Ships with a [Claude Code skill](state-check/.claude/skills/state-check.md) for conversational use.
-- **[metrics.py](metrics/scripts/metrics.py)** — append-only event log for development metrics. Two event types ship: **gate events** (Phase 1 — CI workflows call `log-gate` on every gate run; pass/fail records accumulate as JSONL) and **session events** (Phase 2 partial — engineers run `log-session` at the end of each work session; `sprint_close.py` refuses to lock a sprint with zero logged sessions when the metrics module is installed, so the discipline is structural). Threshold ranges that *interpret* session counts (healthy / high / low, rework-rate alerts) are deliberately deferred until one engagement has run 3+ sprints under both event types — calibration against simulated data misleads. See [metrics/docs/METRICS.md](metrics/docs/METRICS.md).
-- **[/incident skill](tooling/.claude/skills/incident.md)** — post-deployment learning loop. Orchestrates the post-mortem using [incident-TEMPLATE.md](tooling/templates/incident-TEMPLATE.md), extracts a specific prevention rule into `docs/failures/`, names the enforcement surface where the rule will actually run (CLAUDE.md / CI / architecture-guard test / security prompt / test-matrix), and optionally drafts a design-doc update PR or a superseding ADR when an incident invalidates a requirement. Completes the SDLC coverage that today stops at sprint close. Open incidents (post-mortems without a `Resolved:` timestamp) are surfaced as P1 learning-loop flags by `state-check.py`.
-- **Method skills** — conversational wrappers around the enforcement scripts: [/prd](tooling/.claude/skills/prd.md) scopes a single sprint from the design document and produces `sprints/vN/PRD.md` + `TASKS.md` that `reconcile.py` parses; [/dev](tooling/.claude/skills/dev.md) executes one task per session, enforces the test-matrix categories named in `Tests required:`, and reads the task's `Autonomy:` annotation to tune checkpoint cadence; [/sprint-close](tooling/.claude/skills/sprint-close.md) wraps `sprint_close.py` and walks the engineer through `RETRO.md`, sign-off, and the security/UI-QA escalation when the PRD said they were required.
-- **Gate ceremony skills** — Internal Product Mode graduation gates: [/gate-1-to-2](tooling/.claude/skills/gate-1-to-2.md) runs the Stage 1 → 2 evidence interview (real problem, real users, named commitment) and produces `docs/gates/stage-1-to-2.md`; [/gate-2-to-3](tooling/.claude/skills/gate-2-to-3.md) runs the Stage 2 → 3 commercialization gate, including the structural pre-committed-retention check (the metric and threshold must be in the Stage 2 PRD *before* the data is read), and produces `docs/gates/stage-2-to-3.md`. Both refuse to graduate without explicit evidence and named decisions.
-- **[AI-assisted PR review checklist](tooling/templates/code-review-AI-CHECKLIST.md)** — ~25-item checklist reviewers attach to PRs marked `AI-assisted: yes`. Targets AI-specific failure modes generic PR review misses: invented APIs, plausible-but-wrong docstrings, defensive coding for impossible states, silent scope creep beyond the task's `Satisfies:` IDs, tests modified to match implementation. `[blocking]` items are merge-blockers. The [.github/pull_request_template.md](.github/pull_request_template.md) carries the `AI-assisted: yes / no` field that points reviewers at the checklist; handbook §1.8 covers when to skip it honestly.
-- **Templates** — [CLAUDE.md](tooling/templates/CLAUDE.md), [client intake](tooling/templates/client-intake-TEMPLATE.md), [sprint PRD](tooling/templates/sprint-PRD-TEMPLATE.md), [tasks](tooling/templates/sprint-TASKS-TEMPLATE.md), [failures log](tooling/templates/failures-log-TEMPLATE.md), [retro](tooling/templates/retro-TEMPLATE.md), [security suppressions](tooling/templates/security-suppressions-TEMPLATE.md), [incident post-mortem](tooling/templates/incident-TEMPLATE.md), [AI-assisted PR review checklist](tooling/templates/code-review-AI-CHECKLIST.md).
+### Structural enforcement (these block work that would otherwise pass)
+
+| Tool | What it does |
+|---|---|
+| [`reconcile.py`](tooling/scripts/reconcile.py) | Sprint coverage check. Every PRD requirement must be satisfied by a completed task or `[DEFERRED]` with target. Symbol-presence check catches "empty stub passes reconcile." `--strict-symbols` hard-fails on stubs. Runs in CI via [reconcile.yml](tooling/.github/workflows/reconcile.yml). |
+| [`gap.py`](tooling/scripts/gap.py) | Initiative-boundary coverage check. Diffs design-doc stable IDs against the union of `Satisfies:` lines across all sprints. Emits `docs/<INITIATIVE>_GAP_ANALYSIS.md` with covered / deferred / orphaned / conflicted sections. v1 handles single-hop `SUPERSEDED-BY:`. Driven by [/gap](tooling/.claude/skills/gap.md). |
+| [`sprint_close.py`](tooling/scripts/sprint_close.py) | Atomic sprint closure. Runs reconcile, refuses on `/gap` orphans, verifies `RETRO.md` is real (not template stub), verifies `SIGNOFF.md`, runs scope-artifact checks (`/security-review` and `/ui-qa` artifacts when the PRD flagged them required), refuses if zero session events were logged when `metrics/` is installed. Writes `sprints/vN/.lock` only when every check passes. Python stdlib only. |
+| [`sprint_gate.py`](tooling/hooks/sprint_gate.py) | Claude Code `PreToolUse` hook. Two enforcement modes: (1) blocks writes under `sprints/vK/` when an earlier `sprints/vJ/` (J<K) lacks `.lock`; (2) when a prior sprint is unlocked, blocks writes outside the active TASKS.md `Files:` allowlist (open `[ ]` tasks only — `[x]` and `[DEFERRED]` excluded). Logs blocks to `sprints/vN/.gate-blocks.log`. Install via [claude-settings-hooks-TEMPLATE.json](tooling/templates/claude-settings-hooks-TEMPLATE.json). |
+| [`security.yml`](tooling/.github/workflows/security.yml) | Semgrep merge gate. Blocks PRs on any ERROR-severity finding. Deliberate suppressions live in `docs/security/suppressions.md` (template at [security-suppressions-TEMPLATE.md](tooling/templates/security-suppressions-TEMPLATE.md)) with a 90-day re-review ceremony enforced by state-check. |
+| [`dev_session.py`](tooling/scripts/dev_session.py) | Marker-file enforcement for the `/dev-test` → `/dev-impl` session split. `test-done` writes `sprints/vN/.in-progress/T-NNN.test-session-done` with the test commit SHA. `check-impl-ready` refuses the implementation session unless the marker exists, is well-formed, and the recorded commit is verifiable on disk. `mark-complete` moves the marker to `T-NNN.complete`. Method rule 4 made structural. |
+
+### Skills (conversational wrappers around the scripts)
+
+| Skill | When to run it |
+|---|---|
+| [`/prd`](tooling/.claude/skills/prd.md) | Start of sprint. Scopes from the design doc, runs the scoped-completeness pass (step 4), produces `PRD.md` + `TASKS.md` with `Files:` allowlist on each task. |
+| [`/dev-test`](tooling/.claude/skills/dev-test.md) | Session 1 of every task. Writes the failing test matrix (categories A–E per `Tests required:`), commits, drops the `dev_session.py` marker. |
+| [`/dev-impl`](tooling/.claude/skills/dev-impl.md) | Session 2 of every task — **must be a new Claude Code session**. Refuses to start until `dev_session.py check-impl-ready` succeeds. Implements until the matrix passes. Runs `mark-complete` on done. |
+| [`/dev`](tooling/.claude/skills/dev.md) | Router only. Points the engineer at `/dev-test` or `/dev-impl` based on whether a marker exists. |
+| [`/gap`](tooling/.claude/skills/gap.md) | Between sprints, before `/sprint-close`. Runs the script, walks the engineer through orphans and conflicts, performs the upstream-completeness pass against intake §7.5, commits the analysis. |
+| [`/sprint-close`](tooling/.claude/skills/sprint-close.md) | End of sprint. Wraps `sprint_close.py`. Walks the engineer through `RETRO.md` (template-stub answers rejected structurally), sign-off, and `/security-review` / `/ui-qa` escalation when the PRD said they were required. Refuses lock on any check failure. |
+| [`/security-review`](tooling/.claude/skills/security-review.md) | When the sprint PRD declares `` `/security-review` required: Yes ``. Produces `sprints/vN/SECURITY-REVIEW.md`; `Decision: blocked` blocks the lock. |
+| [`/ui-qa`](tooling/.claude/skills/ui-qa.md) | When the sprint PRD declares `` `/ui-qa` required: Yes ``. Produces `sprints/vN/UI-QA.md`; `Decision: blocked` blocks the lock. |
+| [`/incident`](tooling/.claude/skills/incident.md) | Post-deployment learning loop. Orchestrates the post-mortem, extracts a prevention rule into `docs/failures/`, names the enforcement surface (CLAUDE.md / CI / architecture guard / security prompt / test matrix). Open incidents flagged P1 by state-check. |
+| [`/gate-1-to-2`](tooling/.claude/skills/gate-1-to-2.md), [`/gate-2-to-3`](tooling/.claude/skills/gate-2-to-3.md) | Internal Product Mode graduation gates. Stage 2→3 enforces the pre-committed retention metric (must be in the Stage 2 PRD *before* the data is read). |
+
+### Heads-up display
+
+| Tool | What it does |
+|---|---|
+| [`state-check.py`](state-check/scripts/state-check.py) | Detects mode, stage, active sprint, and flags. Surfaces P0 (blocking) / P1 (warn) / P2 (nudge). Includes `check_gap_analysis_staleness` (P1 when `docs/<INITIATIVE>_GAP_ANALYSIS.md` is missing or older than the newest sprint `.lock`). Ships with a conversational [skill](state-check/.claude/skills/state-check.md). |
+| [`metrics.py`](metrics/scripts/metrics.py) | Append-only JSONL event log at `docs/metrics/events.jsonl`. Gate events (Phase 1, automatic from CI) and session events (Phase 2, manual `log-session`). `sprint_close.py` refuses zero-session sprints when `metrics/` is installed. Threshold interpretation deliberately deferred — see [METRICS.md](metrics/docs/METRICS.md). |
+
+### Process artifacts
+
+- [AI-assisted PR review checklist](tooling/templates/code-review-AI-CHECKLIST.md) — ~25-item checklist for PRs marked `AI-assisted: yes` in [.github/pull_request_template.md](.github/pull_request_template.md). Targets AI-specific failure modes (invented APIs, plausible-but-wrong docstrings, defensive coding for impossible states, silent scope creep, tests modified to match implementation).
+- Templates under [tooling/templates/](tooling/templates/) — CLAUDE.md, client intake (Section 7.5 = enumeration discipline), sprint PRD, sprint TASKS (`Files:` is load-bearing — see template), retro, failures log, security suppressions, incident post-mortem, security review, UI QA.
 
 ## What this deliberately does NOT include yet
 
-- **Automation for `/gap`, `/ui-qa`** — currently manual checklists. Promote to scripts after the manual process has stabilized on at least one engagement. (Security has moved from checklist to structural gate via [security.yml](tooling/.github/workflows/security.yml); manual `/security-review` remains as the escalation path for deeper human review. `/sprint-close` is now scripted via [sprint_close.py](tooling/scripts/sprint_close.py).)
-- **Enforcement hooks** — structural cross-sprint write blocking now ships via [sprint_gate.py](tooling/hooks/sprint_gate.py) as a `PreToolUse` hook. Cultural discipline graduated to structural enforcement.
 - **Mutation testing setup** — language-specific; add when you pick critical modules.
+- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)) — the structural pieces shipped (`log-session`, `sprint_close.py` zero-sessions refusal, retro template section). Threshold ranges (healthy / high / low session counts, rework-rate alerts) and the rollup CLI are deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging. Calibrating against simulated data misleads more than it informs.
+- **Multi-hop `SUPERSEDED-BY:` chain semantics for `/gap`** ([#29](https://github.com/colaberry/ai-assisted-development-method/issues/29)) — v1 handles single-hop supersession; full chain resolution is a separate piece.
+
+(Earlier "not yet" items — `/gap` automation, `/security-review` and `/ui-qa` skills, `sprint-close` automation, the cross-sprint hook, the test/impl session split — have all shipped. See [CHANGELOG.md](CHANGELOG.md).)
 
 ## Status
 

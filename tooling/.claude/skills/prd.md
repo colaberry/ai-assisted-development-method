@@ -51,8 +51,9 @@ For Internal Product Mode: if `stage == "exploration"` and `docs/hypothesis.md` 
 ## Interaction with other skills
 
 - `/prd` runs after `/sprint-close` on the previous sprint. Fresh sprints start with an unlocked directory; the hook and state-check expect that state.
-- `/dev-test` and `/dev-impl` run inside a sprint, one task at a time, in separate Claude Code sessions. `/prd` produces the work those skills consume.
+- `/dev-test` and `/dev-impl` run inside a sprint, one task at a time, in separate Claude Code sessions. `/prd` produces the work those skills consume. The `Files:` allowlist on each task is load-bearing: `sprint_gate.py` reads it as a PreToolUse hook and blocks writes outside the active task's allowlist, so vague or missing `Files:` lines translate directly into friction during implementation. Write them carefully.
 - `/sprint-close` reads the PRD and TASKS that `/prd` wrote and enforces coverage before allowing the lock.
+- `/gap` is the complementary initiative-boundary gate. The completeness pass this skill runs (Step 4) works at the *sprint scope* — does every requirement the engineer scoped into vN have a task, a `[DEFERRED]`, or a documented N/A? `/gap` works at the *initiative scope* — does every requirement in `docs/<INITIATIVE>.md` ever make it into some sprint? Both passes are necessary. A requirement can pass `/prd`'s step 4 in every sprint (scope was honest) and still be orphaned at `/gap` (nobody ever scoped it).
 
 ## Deliverables at the end of `/prd`
 

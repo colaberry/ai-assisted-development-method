@@ -55,6 +55,8 @@ Explicitly listed here so `/reconcile` can distinguish "in scope but not done" f
 - **`/security-review` required:** Yes / No
 - **`/ui-qa` required:** Yes / No
 
+> Setting either flag to `Yes` is structurally enforced — `sprint_close.py` reads these lines and refuses to lock the sprint unless `sprints/vN/SECURITY-REVIEW.md` (and/or `sprints/vN/UI-QA.md`) exists with a signed `Decision:` line that is not `blocked`. Mark `Yes` deliberately: it commits the sprint to running the corresponding skill. Mark `No` only when scope genuinely doesn't touch the surface; if the answer is "probably not but we should check," the answer is `Yes`.
+
 ---
 
 ## Known risks
