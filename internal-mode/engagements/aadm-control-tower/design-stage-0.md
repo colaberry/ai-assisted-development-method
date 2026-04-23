@@ -4,8 +4,8 @@
 |---|---|
 | **Initiative** | AADM Control Tower — portfolio-level dashboard over active AADM engagements. |
 | **Stage scoped by this doc** | **Stage 0 only** (localhost, single user, `AUTH_MODE=dev`, zero cloud spend). Stage 1 (cloud-internal) and Stage 2 (external tenants / OSS) have their own design docs, authored at their respective graduation gates. |
-| **Intake** | [`method/intake/aadm-control-tower-2026-04-23.md`](../intake/aadm-control-tower-2026-04-23.md) — this doc cites intake IDs as `intake §X`. |
-| **Mode** | AADM Internal Product Mode (dogfood). Mode stages documented in [`internal-mode/Internal_Product_Mode.md`](../../internal-mode/Internal_Product_Mode.md). |
+| **Intake** | [`internal-mode/engagements/aadm-control-tower/intake.md`](./intake.md) — this doc cites intake IDs as `intake §X`. |
+| **Mode** | AADM Internal Product Mode (dogfood). Mode stages documented in [`internal-mode/Internal_Product_Mode.md`](../../Internal_Product_Mode.md). |
 | **Created** | 2026-04-23 |
 | **Author** | Ram Kotamaraja (with Claude Code) |
 | **Status** | **Draft** — pending ambiguity-pass Qn resolution (§11) and Ram's sign-off. |
@@ -372,7 +372,7 @@ Explicit deferrals, each marked with the target stage where they re-enter scope:
 - **GitHub App-based repo access** → Stage 1.
 - **Multi-tenant UI (tenant switcher, per-tenant branding)** → Stage 2.
 - **Alerting / notifications / digests** → Stage 2 (with explicit re-review of intake §3 anti-example #5).
-- **Skill-manifest / plugin-aware rendering** → gated on extension-framework roadmap §4 graduation signal; see [`docs/roadmap/extension-framework.md`](../../docs/roadmap/extension-framework.md).
+- **Skill-manifest / plugin-aware rendering** → gated on extension-framework roadmap §4 graduation signal; see [`docs/roadmap/extension-framework.md`](../../../docs/roadmap/extension-framework.md).
 
 ---
 
@@ -404,7 +404,7 @@ Proposed sprint v1 scope (mirrors intake §14 with design-doc IDs attached):
 
 ## §14 Cross-references
 
-- `method/intake/aadm-control-tower-2026-04-23.md` — intake (upstream source of truth for problem, users, constraints).
+- `internal-mode/engagements/aadm-control-tower/intake.md` — intake (upstream source of truth for problem, users, constraints).
 - `method/AI_Assisted_Development_Method_v3_2_1.md` — parent method; design-doc conventions from §1 and §3 of this doc derive from §3 of the method doc.
 - `internal-mode/Internal_Product_Mode.md` — mode governing this initiative; Stage 0/1/2 nomenclature in this doc maps to exploration/validation/commercialization stages there.
 - `docs/roadmap/extension-framework.md` — roadmap for third-party skill integration; §5 non-goals of that doc constrain what this webapp is allowed to render per §1.2 of this doc.

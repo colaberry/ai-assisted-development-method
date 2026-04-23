@@ -328,7 +328,7 @@ N/A for v0 — internal engagement. If productization (Q1) resolves to "yes," a 
 - [ ] Client champion review. (Same person as tech lead in this engagement — sign-off conflates.)
 - [ ] SOW in draft form. **N/A** for Stage 0 and Stage 1 internal engagement; revisit at Stage 1 → Stage 2 gate if productization proceeds.
 - [x] Initial risk assessment done (§11).
-- [x] Intake document committed to the AADM repo at `method/intake/aadm-control-tower-2026-04-23.md` as a dogfood artifact. When the webapp's own repo is bootstrapped, this file also becomes the canonical `docs/intake/` entry there.
+- [x] Intake document committed to the AADM repo at `internal-mode/engagements/aadm-control-tower/intake.md` as a dogfood artifact. When the webapp's own repo is bootstrapped, this file also becomes the canonical `docs/intake/` entry there.
 
 **Intake is ready to close.** Q1, Q4, Q5, Q9 (the four originally-blocking questions for first-sprint scope) are all answered. Q2, Q6, Q7, Q8, Q10, Q11 are deferred with explicit default assumptions that do not block Stage 0 or first-sprint implementation. Next step is design-doc drafting (`docs/aadm-control-tower.md`) once this intake file is moved into the bootstrapped webapp repo.
 
@@ -363,5 +363,5 @@ When ready, hand this intake to Claude Code with the prompt block from the templ
 - **Number of open questions at intake close:** 7 (0 blocking Stage 0 or first sprint; all 7 have explicit default assumptions documented in §9).
 - **Questions resolved during intake:** 4 (Q1 productization intent, Q4 authn stack, Q5 deployment target, Q9 language/framework).
 - **Questions deferred with defaults:** 7 (Q2, Q3 superseded, Q6, Q7, Q8, Q10, Q11).
-- **Link to resulting design doc:** `method/design-docs/aadm-control-tower-stage-0.md` (draft, co-located with this intake in the AADM repo until the webapp repo is bootstrapped).
+- **Link to resulting design doc:** `internal-mode/engagements/aadm-control-tower/design-stage-0.md` (draft, co-located with this intake in the AADM repo until the webapp repo is bootstrapped).
 - **Link to SOW:** N/A (internal engagement through Stage 1; SOW revisited at Stage 1 → Stage 2 commercialization gate).
