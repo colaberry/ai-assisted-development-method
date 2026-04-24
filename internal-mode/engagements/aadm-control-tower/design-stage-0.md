@@ -382,7 +382,7 @@ Proposed sprint v1 scope (mirrors intake §14 with design-doc IDs attached):
 
 | # | Task | Satisfies |
 |---|---|---|
-| 1 | Repo bootstrap — monorepo scaffold (`backend/`, `frontend/`, `docker-compose.yml`, `.env.example`, AADM `.claude/` skills). | §3.1, §3.3 |
+| 1 | Repo bootstrap — new git repo at `colaberry/aadm-control-tower` (GitHub); monorepo scaffold (`backend/`, `frontend/`, `docker-compose.yml`, `.env.example`, AADM `.claude/` skills); copy `intake.md` and `design-stage-0.md` into the new repo's `docs/`; then add a "SNAPSHOT" banner to the AADM-repo copies pointing to the canonical location (per `internal-mode/engagements/aadm-control-tower/README.md`). | §3.1, §3.3 |
 | 2 | `RepoSource` abstraction + `LocalFilesystemRepoSource` impl + Category E guard. | §4.1, D1 |
 | 3 | `AuthProvider` abstraction + `DevBypassAuth` impl + Category E guard. | §4.2, D1 |
 | 4 | `SecretSource` abstraction + `EnvVarSecretSource` impl + Category E guard. | §4.3, D1 |
