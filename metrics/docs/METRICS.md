@@ -140,7 +140,7 @@ Two workable patterns until Phase 2 closes this:
 1. **Check the Actions run log.** The `Logged gate ...` line appears in the CI output. For Phase 1 you have visibility, just not aggregation.
 2. **Local logging.** Engineers running `/gap` or `/sprint-close` locally write to the committed `events.jsonl`, which lives on `main`. This captures the events that matter most for retro discussions.
 
-Phase 2 (issue [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)) will add a commit-back pattern from CI on merged PRs, so gate events from PR runs become durable. Don't build that yet — it requires a bot identity and branch-protection coordination that's worth doing once, against real demand.
+Phase 2 (issue [#13](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/13)) will add a commit-back pattern from CI on merged PRs, so gate events from PR runs become durable. Don't build that yet — it requires a bot identity and branch-protection coordination that's worth doing once, against real demand.
 
 ---
 
@@ -265,4 +265,4 @@ Tools are levers. If the lever isn't moving anything, put it down.
 | Count sessions for a sprint | `metrics.py count-sessions --sprint v3 --json` |
 | List just session events | `metrics.py list-events --event-type session --sprint v3` |
 
-**Default mental model.** Wire `log-gate` into every gate workflow with `if: always()`. Log a session event at the end of every `/dev-test`, `/dev-impl`, or code-review session — the `sprint_close.py` check will bounce the lock if you don't. Read the raw session counts in retro. Defer threshold-based interpretation (healthy / high / low) until real engagement data calibrates the ranges in a follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13).
+**Default mental model.** Wire `log-gate` into every gate workflow with `if: always()`. Log a session event at the end of every `/dev-test`, `/dev-impl`, or code-review session — the `sprint_close.py` check will bounce the lock if you don't. Read the raw session counts in retro. Defer threshold-based interpretation (healthy / high / low) until real engagement data calibrates the ranges in a follow-up to [#13](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/13).
