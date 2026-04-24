@@ -152,7 +152,7 @@ Refuse to proceed if:
 - Supersession is handled at a single-hop level: a requirement carrying
   a `SUPERSEDED-BY: §X, §Y` line is treated as covered when any of
   `§X`, `§Y` is covered or deferred-with-target. Full multi-hop
-  supersession chain semantics are [issue #29](https://github.com/colaberry/ai-assisted-development-method/issues/29)
+  supersession chain semantics are [issue #29](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/29)
   and will land with the stable-ID supersession protocol.
 - Deferred tasks without a `Target:` line do not count as legitimate
   deferrals. They surface as orphaned until a target is added.

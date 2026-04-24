@@ -236,8 +236,8 @@ From honest prediction: these will happen in your first initiative.
 ## What this bundle deliberately does NOT include yet
 
 - **Mutation testing setup.** Language-specific; add when you pick critical modules.
-- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/ai-assisted-development-method/issues/13)). Structural pieces shipped (logging, refusal-on-zero); threshold ranges deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging.
-- **Multi-hop `SUPERSEDED-BY:` chains in `/gap`** ([#29](https://github.com/colaberry/ai-assisted-development-method/issues/29)) — v1 handles single-hop only.
+- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/13)). Structural pieces shipped (logging, refusal-on-zero); threshold ranges deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging.
+- **Multi-hop `SUPERSEDED-BY:` chains in `/gap`** ([#29](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/29)) — v1 handles single-hop only.
 - **`/walkthrough` script** — the manual ceremony works fine and there's no failure-mode evidence yet that demands a script.
 
 ## Quick reference — the 15 rules
