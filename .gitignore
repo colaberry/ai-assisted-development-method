@@ -9,6 +9,10 @@ __pycache__/
 # Claude Code local settings (per-user, not for the repo)
 .claude/settings.local.json
 
+# Claude Code agent worktrees — scratch space for isolated agent runs.
+# Never commit these.
+.claude/worktrees/
+
 # Editors
 *.swp
 .idea/
