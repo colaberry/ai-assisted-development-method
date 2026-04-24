@@ -153,8 +153,8 @@ flowchart TD
 ## What this deliberately does NOT include yet
 
 - **Mutation testing setup** — language-specific; add when you pick critical modules.
-- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/13)) — the structural pieces shipped (`log-session`, `sprint_close.py` zero-sessions refusal, retro template section). Threshold ranges (healthy / high / low session counts, rework-rate alerts) and the rollup CLI are deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging. Calibrating against simulated data misleads more than it informs.
-- **Multi-hop `SUPERSEDED-BY:` chain semantics for `/gap`** ([#29](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/29)) — v1 handles single-hop supersession; full chain resolution is a separate piece.
+- **Threshold interpretation for session metrics** (follow-up to [#13](https://github.com/colaberry/AADM-Ai-Assisted-Development-Method/issues/13)) — the structural pieces shipped (`log-session`, `sprint_close.py` zero-sessions refusal, retro template section). Threshold ranges (healthy / high / low session counts, rework-rate alerts) and the rollup CLI are deliberately deferred until at least one engagement has run 3+ sprints under both gate and session logging. Calibrating against simulated data misleads more than it informs.
+- **Multi-hop `SUPERSEDED-BY:` chain semantics for `/gap`** ([#29](https://github.com/colaberry/AADM-Ai-Assisted-Development-Method/issues/29)) — v1 handles single-hop supersession; full chain resolution is a separate piece.
 
 (Earlier "not yet" items — `/gap` automation, `/security-review` and `/ui-qa` skills, `sprint-close` automation, the cross-sprint hook, the test/impl session split — have all shipped. See [CHANGELOG.md](CHANGELOG.md).)
 

@@ -5,7 +5,7 @@
 | **Status** | Captured; **not building.** Gated on §4 graduation signal. |
 | **Owner** | Ram Kotamaraja |
 | **Created** | 2026-04-23 |
-| **Prerequisite refactor (§3)** | Queued as an independent sprint — tracked in [issue #48](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/48). Independently valuable; ships regardless of whether §2 ever fires. |
+| **Prerequisite refactor (§3)** | Queued as an independent sprint — tracked in [issue #48](https://github.com/colaberry/AADM-Ai-Assisted-Development-Method/issues/48). Independently valuable; ships regardless of whether §2 ever fires. |
 
 ---
 
@@ -107,7 +107,7 @@ Heaviest-weight item in §2 and the last to ship. Listed here for completeness.
 - **Status:** Queued as an independent sprint.
 - **Shipping status:** Not started.
 - **Target window:** After the Control Tower webapp's Stage 0 reaches usable state; not blocked by §4 graduation.
-- **Tracked in:** [issue #48](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/48).
+- **Tracked in:** [issue #48](https://github.com/colaberry/AADM-Ai-Assisted-Development-Method/issues/48).
 
 ### §3.1 Problem
 

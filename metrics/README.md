@@ -3,7 +3,7 @@
 A lightweight development metrics system for the AI-Assisted Development Method (AADM). Two event types ship today:
 
 - **Gate events** (Phase 1, stable) — every time a structural gate (`reconcile`, `security`, `gap`, `ui_qa`, `sprint_close`) runs, an append-only JSONL record captures the result. Called from CI; no engineer discipline required.
-- **Session events** (Phase 2 partial, [#13](https://github.com/colaberry/AADM-ai-assisted-development-method/issues/13)) — logged by the engineer at session end. `sprint_close.py` refuses to lock a sprint with zero logged sessions, so the discipline is structural not cultural. The retro template has a Session metrics section populated from raw counts.
+- **Session events** (Phase 2 partial, [#13](https://github.com/colaberry/AADM-Ai-Assisted-Development-Method/issues/13)) — logged by the engineer at session end. `sprint_close.py` refuses to lock a sprint with zero logged sessions, so the discipline is structural not cultural. The retro template has a Session metrics section populated from raw counts.
 
 **Deliberately not shipped yet:** threshold ranges that would *interpret* session counts (healthy / high / low, rework-rate alerts, tokens/session). Calibrating them against simulated data produces metrics that mislead more than they inform. They land in a follow-up once at least one real engagement has run 3+ sprints under both Phase 1 gate logging and Phase 2 session logging.
 
